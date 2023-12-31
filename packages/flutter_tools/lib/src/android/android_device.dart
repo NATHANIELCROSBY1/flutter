@@ -7,10 +7,8 @@ import 'dart:async';
 import 'package:meta/meta.dart';
 import 'package:process/process.dart';
 
-import '../android/android_builder.dart';
-import '../android/android_sdk.dart';
 import '../application_package.dart';
-import '../base/common.dart' show throwToolExit, unawaited;
+import '../base/common.dart' show throwToolExit;
 import '../base/file_system.dart';
 import '../base/io.dart';
 import '../base/logger.dart';
@@ -22,8 +20,8 @@ import '../device.dart';
 import '../device_port_forwarder.dart';
 import '../project.dart';
 import '../protocol_discovery.dart';
-
 import 'android.dart';
+import 'android_builder.dart';
 import 'android_console.dart';
 import 'android_sdk.dart';
 import 'application_package.dart';
@@ -56,7 +54,7 @@ const Map<String, HardwareType> kKnownHardware = <String, HardwareType>{
 /// map to specify that they are actually physical devices.
 class AndroidDevice extends Device {
   AndroidDevice(
-    String id, {
+    super.id, {
     this.productID,
     required this.modelID,
     this.deviceCodeName,
@@ -74,7 +72,6 @@ class AndroidDevice extends Device {
        _androidConsoleSocketFactory = androidConsoleSocketFactory,
        _processUtils = ProcessUtils(logger: logger, processManager: processManager),
        super(
-         id,
          category: Category.mobile,
          platformType: PlatformType.android,
          ephemeral: true,
@@ -91,6 +88,14 @@ class AndroidDevice extends Device {
   final String? productID;
   final String modelID;
   final String? deviceCodeName;
+
+  @override
+  // Wirelessly paired Android devices should have `adb-tls-connect` in the id.
+  // Source: https://android.googlesource.com/platform/packages/modules/adb/+/f4ba8d73079b99532069dbe888a58167b8723d6c/adb_mdns.h#30
+  DeviceConnectionInterface get connectionInterface =>
+      id.contains('adb-tls-connect')
+          ? DeviceConnectionInterface.wireless
+          : DeviceConnectionInterface.attached;
 
   late final Future<Map<String, String>> _properties = () async {
     Map<String, String> properties = <String, String>{};
@@ -228,7 +233,6 @@ class AndroidDevice extends Device {
       case TargetPlatform.linux_x64:
       case TargetPlatform.tester:
       case TargetPlatform.web_javascript:
-      case TargetPlatform.windows_uwp_x64:
       case TargetPlatform.windows_x64:
         throw UnsupportedError('Invalid target platform for Android');
     }
@@ -316,7 +320,7 @@ class AndroidDevice extends Device {
     try {
       // If the server is automatically restarted, then we get irrelevant
       // output lines like this, which we want to ignore:
-      //   adb server is out of date.  killing..
+      //   adb server is out of date. killing..
       //   * daemon started successfully *
       await _processUtils.run(
         <String>[adbPath, 'start-server'],
@@ -370,7 +374,7 @@ class AndroidDevice extends Device {
 
   @override
   Future<bool> isAppInstalled(
-    AndroidApk app, {
+    ApplicationPackage app, {
     String? userIdentifier,
   }) async {
     // This call takes 400ms - 600ms.
@@ -382,7 +386,7 @@ class AndroidDevice extends Device {
         'packages',
         if (userIdentifier != null)
           ...<String>['--user', userIdentifier],
-        app.id
+        app.id,
       ]);
       return LineSplitter.split(listOut.stdout).contains('package:${app.id}');
     } on Exception catch (error) {
@@ -392,14 +396,14 @@ class AndroidDevice extends Device {
   }
 
   @override
-  Future<bool> isLatestBuildInstalled(AndroidApk app) async {
+  Future<bool> isLatestBuildInstalled(covariant AndroidApk app) async {
     final String installedSha1 = await _getDeviceApkSha1(app);
     return installedSha1.isNotEmpty && installedSha1 == _getSourceSha1(app);
   }
 
   @override
   Future<bool> installApp(
-    AndroidApk app, {
+    covariant AndroidApk app, {
     String? userIdentifier,
   }) async {
     if (!await _adbIsValid) {
@@ -449,7 +453,7 @@ class AndroidDevice extends Device {
         '-r',
         if (userIdentifier != null)
           ...<String>['--user', userIdentifier],
-        app.applicationPackage.path
+        app.applicationPackage.path,
       ]));
     status.stop();
     // Some versions of adb exit with exit code 0 even on failure :(
@@ -482,7 +486,7 @@ class AndroidDevice extends Device {
 
   @override
   Future<bool> uninstallApp(
-    AndroidApk app, {
+    ApplicationPackage app, {
     String? userIdentifier,
   }) async {
     if (!await _adbIsValid) {
@@ -496,7 +500,8 @@ class AndroidDevice extends Device {
           'uninstall',
           if (userIdentifier != null)
             ...<String>['--user', userIdentifier],
-          app.id]),
+          app.id,
+        ]),
         throwOnError: true,
       );
       uninstallOut = uninstallResult.stdout;
@@ -522,7 +527,7 @@ class AndroidDevice extends Device {
 
   @override
   Future<LaunchResult> startApp(
-    AndroidApk package, {
+    AndroidApk? package, {
     String? mainPath,
     String? route,
     required DebuggingOptions debuggingOptions,
@@ -547,16 +552,12 @@ class AndroidDevice extends Device {
     switch (devicePlatform) {
       case TargetPlatform.android_arm:
         androidArch = AndroidArch.armeabi_v7a;
-        break;
       case TargetPlatform.android_arm64:
         androidArch = AndroidArch.arm64_v8a;
-        break;
       case TargetPlatform.android_x64:
         androidArch = AndroidArch.x86_64;
-        break;
       case TargetPlatform.android_x86:
         androidArch = AndroidArch.x86;
-        break;
       case TargetPlatform.android:
       case TargetPlatform.darwin:
       case TargetPlatform.fuchsia_arm64:
@@ -566,7 +567,6 @@ class AndroidDevice extends Device {
       case TargetPlatform.linux_x64:
       case TargetPlatform.tester:
       case TargetPlatform.web_javascript:
-      case TargetPlatform.windows_uwp_x64:
       case TargetPlatform.windows_x64:
         _logger.printError('Android platforms are only supported.');
         return LaunchResult.failed();
@@ -603,12 +603,12 @@ class AndroidDevice extends Device {
     }
 
     final bool traceStartup = platformArgs['trace-startup'] as bool? ?? false;
-    ProtocolDiscovery? observatoryDiscovery;
+    ProtocolDiscovery? vmServiceDiscovery;
 
     if (debuggingOptions.debuggingEnabled) {
-      observatoryDiscovery = ProtocolDiscovery.observatory(
+      vmServiceDiscovery = ProtocolDiscovery.vmService(
         // Avoid using getLogReader, which returns a singleton instance, because the
-        // observatory discovery will dipose at the end. creating a new logger here allows
+        // VM Service discovery will dipose at the end. creating a new logger here allows
         // logs to be surfaced normally during `flutter drive`.
         await AdbLogReader.createLogReader(
           this,
@@ -625,11 +625,14 @@ class AndroidDevice extends Device {
     final String dartVmFlags = computeDartVmFlags(debuggingOptions);
     final String? traceAllowlist = debuggingOptions.traceAllowlist;
     final String? traceSkiaAllowlist = debuggingOptions.traceSkiaAllowlist;
+    final String? traceToFile = debuggingOptions.traceToFile;
     final List<String> cmd = <String>[
       'shell', 'am', 'start',
-      '-a', 'android.intent.action.RUN',
+      '-a', 'android.intent.action.MAIN',
+      '-c', 'android.intent.category.LAUNCHER',
       '-f', '0x20000000', // FLAG_ACTIVITY_SINGLE_TOP
-      '--ez', 'enable-dart-profiling', 'true',
+      if (debuggingOptions.enableDartProfiling)
+        ...<String>['--ez', 'enable-dart-profiling', 'true'],
       if (traceStartup)
         ...<String>['--ez', 'trace-startup', 'true'],
       if (route != null)
@@ -646,6 +649,8 @@ class AndroidDevice extends Device {
         ...<String>['--es', 'trace-skia-allowlist', traceSkiaAllowlist],
       if (debuggingOptions.traceSystrace)
         ...<String>['--ez', 'trace-systrace', 'true'],
+      if (traceToFile != null)
+        ...<String>['--es', 'trace-to-file', traceToFile],
       if (debuggingOptions.endlessTraceBuffer)
         ...<String>['--ez', 'endless-trace-buffer', 'true'],
       if (debuggingOptions.dumpSkpOnShaderCompilation)
@@ -654,6 +659,14 @@ class AndroidDevice extends Device {
       ...<String>['--ez', 'cache-sksl', 'true'],
       if (debuggingOptions.purgePersistentCache)
         ...<String>['--ez', 'purge-persistent-cache', 'true'],
+      if (debuggingOptions.enableImpeller == ImpellerStatus.enabled)
+        ...<String>['--ez', 'enable-impeller', 'true'],
+      if (debuggingOptions.enableImpeller == ImpellerStatus.disabled)
+        ...<String>['--ez', 'enable-impeller', 'false'],
+      if (debuggingOptions.enableVulkanValidation)
+        ...<String>['--ez', 'enable-vulkan-validation', 'true'],
+      if (debuggingOptions.impellerForceGL)
+        ...<String>['--ez', 'impeller-force-gl', 'true'],
       if (debuggingOptions.debuggingEnabled) ...<String>[
         if (debuggingOptions.buildInfo.isDebug) ...<String>[
           ...<String>['--ez', 'enable-checked-mode', 'true'],
@@ -687,13 +700,13 @@ class AndroidDevice extends Device {
     }
 
     // Wait for the service protocol port here. This will complete once the
-    // device has printed "Observatory is listening on...".
-    _logger.printTrace('Waiting for observatory port to be available...');
+    // device has printed "VM Service is listening on...".
+    _logger.printTrace('Waiting for VM Service port to be available...');
     try {
-      Uri? observatoryUri;
+      Uri? vmServiceUri;
       if (debuggingOptions.buildInfo.isDebug || debuggingOptions.buildInfo.isProfile) {
-        observatoryUri = await observatoryDiscovery?.uri;
-        if (observatoryUri == null) {
+        vmServiceUri = await vmServiceDiscovery?.uri;
+        if (vmServiceUri == null) {
           _logger.printError(
             'Error waiting for a debug connection: '
             'The log reader stopped unexpectedly',
@@ -701,12 +714,12 @@ class AndroidDevice extends Device {
           return LaunchResult.failed();
         }
       }
-      return LaunchResult.succeeded(observatoryUri: observatoryUri);
+      return LaunchResult.succeeded(vmServiceUri: vmServiceUri);
     } on Exception catch (error) {
       _logger.printError('Error waiting for a debug connection: $error');
       return LaunchResult.failed();
     } finally {
-      await observatoryDiscovery?.cancel();
+      await vmServiceDiscovery?.cancel();
     }
   }
 
@@ -721,11 +734,11 @@ class AndroidDevice extends Device {
 
   @override
   Future<bool> stopApp(
-    AndroidApk app, {
+    ApplicationPackage? app, {
     String? userIdentifier,
-  }) {
+  }) async {
     if (app == null) {
-      return Future<bool>.value(false);
+      return false;
     }
     final List<String> command = adbCommandForDevice(<String>[
       'shell',
@@ -767,7 +780,7 @@ class AndroidDevice extends Device {
 
   @override
   FutureOr<DeviceLogReader> getLogReader({
-    AndroidApk? app,
+    ApplicationPackage? app,
     bool includePastLogs = false,
   }) async {
     // The Android log reader isn't app-specific. The `app` parameter isn't used.
@@ -808,7 +821,7 @@ class AndroidDevice extends Device {
     RunResult output;
     try {
       output = await runAdbCheckedAsync(<String>[
-        'shell', '-x', 'logcat', '-v', 'time', '-t', '1'
+        'shell', '-x', 'logcat', '-v', 'time', '-t', '1',
       ]);
     } on Exception catch (error) {
       _logger.printError('Failed to extract the most recent timestamp from the Android log: $error.');
@@ -939,25 +952,18 @@ AndroidMemoryInfo parseMeminfoDump(String input) {
       switch (key) {
         case AndroidMemoryInfo._kJavaHeapKey:
           androidMemoryInfo.javaHeap = value;
-          break;
         case AndroidMemoryInfo._kNativeHeapKey:
           androidMemoryInfo.nativeHeap = value;
-          break;
         case AndroidMemoryInfo._kCodeKey:
           androidMemoryInfo.code = value;
-          break;
         case AndroidMemoryInfo._kStackKey:
           androidMemoryInfo.stack = value;
-          break;
         case AndroidMemoryInfo._kGraphicsKey:
           androidMemoryInfo.graphics = value;
-          break;
         case AndroidMemoryInfo._kPrivateOtherKey:
           androidMemoryInfo.privateOther = value;
-          break;
         case AndroidMemoryInfo._kSystemKey:
           androidMemoryInfo.system = value;
-          break;
       }
   });
   return androidMemoryInfo;
@@ -1097,6 +1103,11 @@ class AdbLogReader extends DeviceLogReader {
     RegExp(r'^[F]\/[\S^:]+:\s+'),
   ];
 
+  // E/SurfaceSyncer(22636): Failed to find sync for id=9
+  // Some versions of Android spew this out. It is inactionable to the end user
+  // and causes no problems for the application.
+  static final RegExp _surfaceSyncerSpam = RegExp(r'^E/SurfaceSyncer\(\s*\d+\): Failed to find sync for id=\d+');
+
   // 'F/libc(pid): Fatal signal 11'
   static final RegExp _fatalLog = RegExp(r'^F\/libc\s*\(\s*\d+\):\sFatal signal (\d+)');
 
@@ -1151,7 +1162,7 @@ class AdbLogReader extends DeviceLogReader {
           }
         }
       } else if (appPid != null && int.parse(logMatch.group(1)!) == appPid) {
-        acceptLine = true;
+        acceptLine = !_surfaceSyncerSpam.hasMatch(line);
 
         if (_fatalLog.hasMatch(line)) {
           // Hit fatal signal, app is now crashing

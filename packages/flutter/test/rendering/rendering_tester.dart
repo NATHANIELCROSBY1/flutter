@@ -3,16 +3,17 @@
 // found in the LICENSE file.
 
 import 'dart:async';
+import 'dart:ui' show SemanticsUpdate;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart' show TestDefaultBinaryMessengerBinding, EnginePhase, fail;
+import 'package:flutter_test/flutter_test.dart' show EnginePhase, TestDefaultBinaryMessengerBinding, fail;
 
 export 'package:flutter/foundation.dart' show FlutterError, FlutterErrorDetails;
-export 'package:flutter_test/flutter_test.dart' show TestDefaultBinaryMessengerBinding, EnginePhase;
+export 'package:flutter_test/flutter_test.dart' show EnginePhase, TestDefaultBinaryMessengerBinding;
 
 class TestRenderingFlutterBinding extends BindingBase with SchedulerBinding, ServicesBinding, GestureBinding, PaintingBinding, SemanticsBinding, RendererBinding, TestDefaultBinaryMessengerBinding {
   /// Creates a binding for testing rendering library functionality.
@@ -43,14 +44,53 @@ class TestRenderingFlutterBinding extends BindingBase with SchedulerBinding, Ser
   void initInstances() {
     super.initInstances();
     _instance = this;
+    // TODO(goderbauer): Create (fake) window if embedder doesn't provide an implicit view.
+    assert(platformDispatcher.implicitView != null);
+    _renderView = initRenderView(platformDispatcher.implicitView!);
+  }
+
+  @override
+  RenderView get renderView => _renderView;
+  late RenderView _renderView;
+
+  @override
+  PipelineOwner get pipelineOwner => rootPipelineOwner;
+
+  /// Creates a [RenderView] object to be the root of the
+  /// [RenderObject] rendering tree, and initializes it so that it
+  /// will be rendered when the next frame is requested.
+  ///
+  /// Called automatically when the binding is created.
+  RenderView initRenderView(FlutterView view) {
+    final RenderView renderView = RenderView(view: view);
+    rootPipelineOwner.rootNode = renderView;
+    addRenderView(renderView);
+    renderView.prepareInitialFrame();
+    return renderView;
+  }
+
+  @override
+  PipelineOwner createRootPipelineOwner() {
+    return PipelineOwner(
+      onSemanticsOwnerCreated: () {
+        renderView.scheduleInitialSemantics();
+      },
+      onSemanticsUpdate: (SemanticsUpdate update) {
+        renderView.updateSemantics(update);
+      },
+      onSemanticsOwnerDisposed: () {
+        renderView.clearSemantics();
+      },
+    );
   }
 
   /// Creates and initializes the binding. This function is
   /// idempotent; calling it a second time will just return the
   /// previously-created instance.
   static TestRenderingFlutterBinding ensureInitialized({ VoidCallback? onErrors }) {
-    if (_instance != null)
+    if (_instance != null) {
       return _instance!;
+    }
     return TestRenderingFlutterBinding(onErrors: onErrors);
   }
 
@@ -111,9 +151,7 @@ class TestRenderingFlutterBinding extends BindingBase with SchedulerBinding, Ser
   /// to test [SchedulerPhase.postFrameCallbacks].
   void pumpCompleteFrame() {
     final FlutterExceptionHandler? oldErrorHandler = FlutterError.onError;
-    FlutterError.onError = (FlutterErrorDetails details) {
-      _errors.add(details);
-    };
+    FlutterError.onError = _errors.add;
     try {
       TestRenderingFlutterBinding.instance.handleBeginFrame(null);
       TestRenderingFlutterBinding.instance.handleDrawFrame();
@@ -138,25 +176,30 @@ class TestRenderingFlutterBinding extends BindingBase with SchedulerBinding, Ser
   void drawFrame() {
     assert(phase != EnginePhase.build, 'rendering_tester does not support testing the build phase; use flutter_test instead');
     final FlutterExceptionHandler? oldErrorHandler = FlutterError.onError;
-    FlutterError.onError = (FlutterErrorDetails details) {
-      _errors.add(details);
-    };
+    FlutterError.onError = _errors.add;
     try {
-      pipelineOwner.flushLayout();
-      if (phase == EnginePhase.layout)
+      rootPipelineOwner.flushLayout();
+      if (phase == EnginePhase.layout) {
         return;
-      pipelineOwner.flushCompositingBits();
-      if (phase == EnginePhase.compositingBits)
+      }
+      rootPipelineOwner.flushCompositingBits();
+      if (phase == EnginePhase.compositingBits) {
         return;
-      pipelineOwner.flushPaint();
-      if (phase == EnginePhase.paint)
+      }
+      rootPipelineOwner.flushPaint();
+      if (phase == EnginePhase.paint) {
         return;
-      renderView.compositeFrame();
-      if (phase == EnginePhase.composite)
+      }
+      for (final RenderView renderView in renderViews) {
+        renderView.compositeFrame();
+      }
+      if (phase == EnginePhase.composite) {
         return;
-      pipelineOwner.flushSemantics();
-      if (phase == EnginePhase.flushSemantics)
+      }
+      rootPipelineOwner.flushSemantics();
+      if (phase == EnginePhase.flushSemantics) {
         return;
+      }
       assert(phase == EnginePhase.flushSemantics || phase == EnginePhase.sendSemanticsUpdate);
     } finally {
       FlutterError.onError = oldErrorHandler;
@@ -191,13 +234,12 @@ class TestRenderingFlutterBinding extends BindingBase with SchedulerBinding, Ser
 ///
 /// If `onErrors` is not null, it is set as [TestRenderingFlutterBinding.onError].
 void layout(
-  RenderBox box, {
+  RenderBox box, { // If you want to just repump the last box, call pumpFrame().
   BoxConstraints? constraints,
   Alignment alignment = Alignment.center,
   EnginePhase phase = EnginePhase.layout,
   VoidCallback? onErrors,
 }) {
-  assert(box != null); // If you want to just repump the last box, call pumpFrame().
   assert(box.parent == null); // We stick the box in another, so you can't reuse it easily, sorry.
 
   TestRenderingFlutterBinding.instance.renderView.child = null;
@@ -219,8 +261,6 @@ void layout(
 ///
 /// If `onErrors` is not null, it is set as [TestRenderingFlutterBinding.onError].
 void pumpFrame({ EnginePhase phase = EnginePhase.layout, VoidCallback? onErrors }) {
-  assert(TestRenderingFlutterBinding.instance != null);
-  assert(TestRenderingFlutterBinding.instance.renderView != null);
   assert(TestRenderingFlutterBinding.instance.renderView.child != null); // call layout() first!
 
   if (onErrors != null) {
@@ -341,7 +381,11 @@ class FakeTicker implements Ticker {
 }
 
 class TestClipPaintingContext extends PaintingContext {
-  TestClipPaintingContext() : super(ContainerLayer(), Rect.zero);
+  TestClipPaintingContext() : this._(ContainerLayer());
+
+  TestClipPaintingContext._(this._containerLayer) : super(_containerLayer, Rect.zero);
+
+  final ContainerLayer _containerLayer;
 
   @override
   ClipRectLayer? pushClipRect(
@@ -357,14 +401,45 @@ class TestClipPaintingContext extends PaintingContext {
   }
 
   Clip clipBehavior = Clip.none;
+
+  @mustCallSuper
+  void dispose() {
+    _containerLayer.dispose();
+  }
 }
 
-void expectOverflowedErrors() {
-  final FlutterErrorDetails errorDetails = TestRenderingFlutterBinding.instance.takeFlutterErrorDetails()!;
-  final bool overflowed = errorDetails.toString().contains('overflowed');
-  if (!overflowed) {
-    FlutterError.reportError(errorDetails);
+class TestPushLayerPaintingContext extends PaintingContext {
+  TestPushLayerPaintingContext() : super(ContainerLayer(), Rect.zero);
+
+  final List<ContainerLayer> pushedLayers = <ContainerLayer>[];
+
+  @override
+  void pushLayer(
+    ContainerLayer childLayer,
+    PaintingContextCallback painter,
+    Offset offset, {
+    Rect? childPaintBounds
+  }) {
+    pushedLayers.add(childLayer);
+    super.pushLayer(childLayer, painter, offset, childPaintBounds: childPaintBounds);
   }
+}
+
+// Absorbs errors that don't have "overflowed" in their error details.
+void absorbOverflowedErrors() {
+  final Iterable<FlutterErrorDetails> errorDetails = TestRenderingFlutterBinding.instance.takeAllFlutterErrorDetails();
+  final Iterable<FlutterErrorDetails> filtered = errorDetails.where((FlutterErrorDetails details) {
+    return !details.toString().contains('overflowed');
+  });
+  if (filtered.isNotEmpty) {
+    filtered.forEach(FlutterError.reportError);
+  }
+}
+
+// Reports any FlutterErrors.
+void expectNoFlutterErrors() {
+  final Iterable<FlutterErrorDetails> errorDetails = TestRenderingFlutterBinding.instance.takeAllFlutterErrorDetails();
+  errorDetails.forEach(FlutterError.reportError);
 }
 
 RenderConstrainedBox get box200x200 =>

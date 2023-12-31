@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -152,7 +153,7 @@ void main() {
     expect(find.byType(ClipRRect), findsOneWidget);
   });
 
-  testWidgets('Not setting clipBehavior does not clip children section', (WidgetTester tester) async {
+  testWidgets('Not setting clipBehavior does not produce a RenderClipRRect object', (WidgetTester tester) async {
     await tester.pumpWidget(
       CupertinoApp(
         home: Center(
@@ -163,6 +164,60 @@ void main() {
       ),
     );
 
-    expect(find.byType(ClipRRect), findsNothing);
+    final Iterable<RenderClipRRect> renderClips = tester.allRenderObjects.whereType<RenderClipRRect>();
+    expect(renderClips, isEmpty);
+  });
+
+  testWidgets('Does not double up padding on header', (WidgetTester tester) async {
+    const Widget header = Text('Header');
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: Center(
+          child: CupertinoFormSection(
+            header: header,
+            children: <Widget>[CupertinoTextFormFieldRow()],
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.getTopLeft(find.byWidget(header)), const Offset(20, 22));
+  });
+
+  testWidgets('Does not double up padding on footer', (WidgetTester tester) async {
+    const Widget footer = Text('Footer');
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: Center(
+          child: CupertinoFormSection(
+            footer: footer,
+            children: <Widget>[CupertinoTextFormFieldRow()],
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.getTopLeft(find.byWidget(footer)), offsetMoreOrLessEquals(const Offset(20, 65), epsilon: 1));
+  });
+
+  testWidgets('Sets custom margin', (WidgetTester tester) async {
+    final Widget child = CupertinoTextFormFieldRow();
+
+    const double margin = 35;
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: Center(
+          child: CupertinoFormSection(
+            margin: const EdgeInsets.all(margin),
+            children: <Widget>[child],
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.getTopLeft(find.byWidget(child)), offsetMoreOrLessEquals(const Offset(margin, 22 + margin), epsilon: 1));
   });
 }

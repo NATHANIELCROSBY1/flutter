@@ -44,8 +44,7 @@ class MultiRootFileSystem extends ForwardingFileSystem {
     required FileSystem delegate,
     required String scheme,
     required List<String> roots,
-  })   : assert(delegate != null),
-        assert(roots.isNotEmpty),
+  })   : assert(roots.isNotEmpty),
         _scheme = scheme,
         _roots = roots.map((String root) => delegate.path.normalize(root)).toList(),
         super(delegate);
@@ -212,12 +211,9 @@ abstract class MultiRootFileSystemEntity<T extends FileSystemEntity,
 class MultiRootFile extends MultiRootFileSystemEntity<File, io.File>
     with ForwardingFile {
   MultiRootFile({
-    required MultiRootFileSystem fileSystem,
-    required io.File delegate,
-  }) : super(
-    fileSystem: fileSystem,
-    delegate: delegate,
-  );
+    required super.fileSystem,
+    required super.delegate,
+  });
 
   @override
   String toString() =>
@@ -228,12 +224,9 @@ class MultiRootDirectory
     extends MultiRootFileSystemEntity<Directory, io.Directory>
     with ForwardingDirectory<Directory> {
   MultiRootDirectory({
-    required MultiRootFileSystem fileSystem,
-    required io.Directory delegate,
-  }) : super(
-    fileSystem: fileSystem,
-    delegate: delegate,
-  );
+    required super.fileSystem,
+    required super.delegate,
+  });
 
   // For the childEntity methods, we first obtain an instance of the entity
   // from the underlying file system, then invoke childEntity() on it, then
@@ -255,15 +248,13 @@ class MultiRootDirectory
     'MultiRootDirectory(fileSystem = $fileSystem, delegate = $delegate)';
 }
 
-class MultiRootLink extends MultiRootFileSystemEntity<Link, io.Link>
+class MultiRootLink
+    extends MultiRootFileSystemEntity<Link, io.Link>
     with ForwardingLink {
   MultiRootLink({
-    required MultiRootFileSystem fileSystem,
-    required io.Link delegate,
-  }) : super(
-    fileSystem: fileSystem,
-    delegate: delegate,
-  );
+    required super.fileSystem,
+    required super.delegate,
+  });
 
   @override
   String toString() =>

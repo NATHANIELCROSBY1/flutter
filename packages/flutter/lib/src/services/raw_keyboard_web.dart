@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:ui' show hashValues;
-
 import 'package:flutter/foundation.dart';
 
-import 'keyboard_key.dart';
-import 'keyboard_maps.dart';
+import 'keyboard_maps.g.dart';
 import 'raw_keyboard.dart';
+
+export 'package:flutter/foundation.dart' show DiagnosticPropertiesBuilder;
+
+export 'keyboard_key.g.dart' show LogicalKeyboardKey, PhysicalKeyboardKey;
 
 String? _unicodeChar(String key) {
   if (key.length == 1) {
@@ -19,22 +20,30 @@ String? _unicodeChar(String key) {
 
 /// Platform-specific key event data for Web.
 ///
+/// This class is DEPRECATED. Platform specific key event data will no longer
+/// available. See [KeyEvent] for what is available.
+///
 /// See also:
 ///
 ///  * [RawKeyboard], which uses this interface to expose key data.
+@Deprecated(
+  'Platform specific key event data is no longer available. See KeyEvent for what is available. '
+  'This feature was deprecated after v3.18.0-2.0.pre.',
+)
 @immutable
 class RawKeyEventDataWeb extends RawKeyEventData {
   /// Creates a key event data structure specific for Web.
-  ///
-  /// The [code] and [metaState] arguments must not be null.
+  @Deprecated(
+    'Platform specific key event data is no longer available. See KeyEvent for what is available. '
+    'This feature was deprecated after v3.18.0-2.0.pre.',
+  )
   const RawKeyEventDataWeb({
     required this.code,
     required this.key,
     this.location = 0,
     this.metaState = modifierNone,
     this.keyCode = 0,
-  })  : assert(code != null),
-        assert(metaState != null);
+  });
 
   /// The `KeyboardEvent.code` corresponding to this event.
   ///
@@ -67,7 +76,7 @@ class RawKeyEventDataWeb extends RawKeyEventData {
   /// The modifiers that were present when the key event occurred.
   ///
   /// See `lib/src/engine/keyboard.dart` in the web engine for the numerical
-  /// values of the `metaState`. These constants are also replicated as static
+  /// values of the [metaState]. These constants are also replicated as static
   /// constants in this class.
   ///
   /// See also:
@@ -100,18 +109,20 @@ class RawKeyEventDataWeb extends RawKeyEventData {
     // Look to see if the keyCode is a key based on location. Typically they are
     // numpad keys (versus main area keys) and left/right modifiers.
     final LogicalKeyboardKey? maybeLocationKey = kWebLocationMap[key]?[location];
-    if (maybeLocationKey != null)
+    if (maybeLocationKey != null) {
       return maybeLocationKey;
+    }
 
-    // Look to see if the [code] is one we know about and have a mapping for.
-    final LogicalKeyboardKey? newKey = kWebToLogicalKey[code];
+    // Look to see if the [key] is one we know about and have a mapping for.
+    final LogicalKeyboardKey? newKey = kWebToLogicalKey[key];
     if (newKey != null) {
       return newKey;
     }
 
     final bool isPrintable = key.length == 1;
-    if (isPrintable)
+    if (isPrintable) {
       return LogicalKeyboardKey(key.toLowerCase().codeUnitAt(0));
+    }
 
     // This is a non-printable key that we don't know about, so we mint a new
     // key from `code`. Don't mint with `key`, because the `key` will always be
@@ -168,10 +179,12 @@ class RawKeyEventDataWeb extends RawKeyEventData {
 
   @override
   bool operator==(Object other) {
-    if (identical(this, other))
+    if (identical(this, other)) {
       return true;
-    if (other.runtimeType != runtimeType)
+    }
+    if (other.runtimeType != runtimeType) {
       return false;
+    }
     return other is RawKeyEventDataWeb
         && other.code == code
         && other.key == key
@@ -181,7 +194,7 @@ class RawKeyEventDataWeb extends RawKeyEventData {
   }
 
   @override
-  int get hashCode => hashValues(
+  int get hashCode => Object.hash(
     code,
     key,
     location,

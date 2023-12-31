@@ -4,9 +4,7 @@
 
 import 'dart:async';
 
-import 'package:dds/src/dap/logging.dart';
-import 'package:dds/src/dap/protocol_generated.dart';
-import 'package:dds/src/dap/protocol_stream.dart';
+import 'package:dds/dap.dart';
 import 'package:flutter_tools/src/debug_adapters/flutter_adapter_args.dart';
 
 import 'test_server.dart';
@@ -27,7 +25,10 @@ class DapTestClient {
     vmServiceUri = event('dart.debuggerUris').then<Uri?>((Event event) {
       final Map<String, Object?> body = event.body! as Map<String, Object?>;
       return Uri.parse(body['vmServiceUri']! as String);
-    }).catchError((Object? e) => null);
+    }).then(
+      (Uri? uri) => uri,
+      onError: (Object? e) => null,
+    );
 
     _subscription = _channel.listen(
       _handleMessage,
@@ -83,6 +84,12 @@ class DapTestClient {
     return _eventController.stream.where((Event e) => e.event == event);
   }
 
+  /// Returns a stream of progress events.
+  Stream<Event> progressEvents() {
+    const Set<String> progressEvents = <String>{'progressStart', 'progressUpdate', 'progressEnd'};
+    return _eventController.stream.where((Event e) => progressEvents.contains(e.event));
+  }
+
   /// Returns a stream of custom 'dart.serviceExtensionAdded' events.
   Stream<Map<String, Object?>> get serviceExtensionAddedEvents =>
       events('dart.serviceExtensionAdded')
@@ -104,6 +111,11 @@ class DapTestClient {
     return custom('hotReload');
   }
 
+  /// Sends a custom request with custom syntax convention to the debug adapter to trigger a Hot Reload.
+  Future<Response> customSyntaxHotReload() {
+    return custom(r'$/hotReload');
+  }
+
   /// Sends a custom request to the debug adapter to trigger a Hot Restart.
   Future<Response> hotRestart() {
     return custom('hotRestart');
@@ -116,12 +128,14 @@ class DapTestClient {
   Future<Response> initialize({
     String exceptionPauseMode = 'None',
     bool? supportsRunInTerminalRequest,
+    bool? supportsProgressReporting,
   }) async {
     final List<ProtocolMessage> responses = await Future.wait(<Future<ProtocolMessage>>[
       event('initialized'),
       sendRequest(InitializeRequestArguments(
         adapterID: 'test',
         supportsRunInTerminalRequest: supportsRunInTerminalRequest,
+        supportsProgressReporting: supportsProgressReporting,
       )),
       sendRequest(
         SetExceptionBreakpointsArguments(
@@ -133,7 +147,7 @@ class DapTestClient {
     return responses[1] as Response; // Return the initialize response.
   }
 
-  /// Send a launchRequest to the server, asking it to start a Dart program.
+  /// Send a launchRequest to the server, asking it to start a Flutter app.
   Future<Response> launch({
     String? program,
     List<String>? args,
@@ -141,11 +155,12 @@ class DapTestClient {
     String? cwd,
     bool? noDebug,
     List<String>? additionalProjectPaths,
-    String? console,
+    bool? allowAnsiColorOutput,
     bool? debugSdkLibraries,
     bool? debugExternalPackageLibraries,
     bool? evaluateGettersInDebugViews,
     bool? evaluateToStringInDebugViews,
+    bool sendLogsToClient = false,
   }) {
     return sendRequest(
       FlutterLaunchRequestArguments(
@@ -154,6 +169,39 @@ class DapTestClient {
         cwd: cwd,
         args: args,
         toolArgs: toolArgs,
+        additionalProjectPaths: additionalProjectPaths,
+        allowAnsiColorOutput: allowAnsiColorOutput,
+        debugSdkLibraries: debugSdkLibraries,
+        debugExternalPackageLibraries: debugExternalPackageLibraries,
+        evaluateGettersInDebugViews: evaluateGettersInDebugViews,
+        evaluateToStringInDebugViews: evaluateToStringInDebugViews,
+        // When running out of process, VM Service traffic won't be available
+        // to the client-side logger, so force logging regardless of
+        // `sendLogsToClient` which sends VM Service traffic in a custom event.
+        sendLogsToClient: sendLogsToClient || captureVmServiceTraffic,
+      ),
+      // We can't automatically pick the command when using a custom type
+      // (FlutterLaunchRequestArguments).
+      overrideCommand: 'launch',
+    );
+  }
+
+  /// Send an attachRequest to the server, asking it to attach to an already-running Flutter app.
+  Future<Response> attach({
+    List<String>? toolArgs,
+    String? vmServiceUri,
+    String? cwd,
+    List<String>? additionalProjectPaths,
+    bool? debugSdkLibraries,
+    bool? debugExternalPackageLibraries,
+    bool? evaluateGettersInDebugViews,
+    bool? evaluateToStringInDebugViews,
+  }) {
+    return sendRequest(
+      FlutterAttachRequestArguments(
+        cwd: cwd,
+        toolArgs: toolArgs,
+        vmServiceUri: vmServiceUri,
         additionalProjectPaths: additionalProjectPaths,
         debugSdkLibraries: debugSdkLibraries,
         debugExternalPackageLibraries: debugExternalPackageLibraries,
@@ -165,8 +213,8 @@ class DapTestClient {
         sendLogsToClient: captureVmServiceTraffic,
       ),
       // We can't automatically pick the command when using a custom type
-      // (DartLaunchRequestArguments).
-      overrideCommand: 'launch',
+      // (FlutterAttachRequestArguments).
+      overrideCommand: 'attach',
     );
   }
 
@@ -289,12 +337,12 @@ extension DapTestClientExtension on DapTestClient {
   /// console, stdout and stderr.
   ///
   /// Only one of [start] or [launch] may be provided. Use [start] to customise
-  /// the whole start of the session (including initialise) or [launch] to only
+  /// the whole start of the session (including initialize) or [launch] to only
   /// customise the [launchRequest].
   Future<List<OutputEventBody>> collectAllOutput({
     String? program,
     String? cwd,
-    Future<Response> Function()? start,
+    Future<void> Function()? start,
     Future<Response> Function()? launch,
     bool skipInitialPubGetOutput = true
   }) async {
@@ -314,12 +362,18 @@ extension DapTestClientExtension on DapTestClient {
 
     final List<OutputEventBody> output = await outputEventsFuture;
 
-    // TODO(dantup): Integration tests currently trigger "flutter pub get" at
-    //   the start due to some timestamp manipulation writing the pubspec.
-    //   It may be possible to remove this if
-    //   https://github.com/flutter/flutter/pull/91300 lands.
+    // Integration tests may trigger "flutter pub get" at the start based of
+    // `pubspec/yaml` and `.dart_tool/package_config.json`.
+    // See
+    //  https://github.com/flutter/flutter/pull/91300
+    //  https://github.com/flutter/flutter/issues/120015
     return skipInitialPubGetOutput
-        ? output.skipWhile((OutputEventBody output) => output.output.startsWith('Running "flutter pub get"')).toList()
+        ? output
+            .skipWhile((OutputEventBody output) =>
+                output.output.startsWith('Running "flutter pub get"') ||
+                output.output.startsWith('Resolving dependencies') ||
+                output.output.startsWith('Got dependencies'))
+            .toList()
         : output;
   }
 
@@ -354,6 +408,35 @@ extension DapTestClientExtension on DapTestClient {
     return TestEvents(
       output: await outputEventsFuture,
       testNotifications: await testNotificationEventsFuture,
+    );
+  }
+
+  /// Sets a breakpoint at [line] in [file].
+  Future<void> setBreakpoint(String filePath, int line) async {
+    await sendRequest(
+      SetBreakpointsArguments(
+        source: Source(path: filePath),
+        breakpoints: <SourceBreakpoint>[
+          SourceBreakpoint(line: line),
+        ],
+      ),
+    );
+  }
+
+  /// Sends a continue request for the given thread.
+  ///
+  /// Returns a Future that completes when the server returns a corresponding
+  /// response.
+  Future<Response> continue_(int threadId) =>
+      sendRequest(ContinueArguments(threadId: threadId));
+
+  /// Clears breakpoints in [file].
+  Future<void> clearBreakpoints(String filePath) async {
+    await sendRequest(
+      SetBreakpointsArguments(
+        source: Source(path: filePath),
+        breakpoints: <SourceBreakpoint>[],
+      ),
     );
   }
 

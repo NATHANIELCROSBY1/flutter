@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
 import 'dart:io';
-import 'dart:ui' show Size, hashValues, Picture, Image;
+import 'dart:ui' show Image, Picture, Size;
 
 import 'package:flutter/foundation.dart';
 
@@ -42,7 +41,7 @@ HttpClientProvider? debugNetworkImageHttpClientProvider;
 /// output size.
 ///
 /// See: [debugOnPaintImage].
-typedef PaintImageCallback = void Function(ImageSizeInfo);
+typedef PaintImageCallback = void Function(ImageSizeInfo info);
 
 /// Tracks the bytes used by a [dart:ui.Image] compared to the bytes needed to
 /// paint that image without scaling it.
@@ -107,7 +106,7 @@ class ImageSizeInfo {
   }
 
   @override
-  int get hashCode => hashValues(source, displaySize, imageSize);
+  int get hashCode => Object.hash(source, displaySize, imageSize);
 
   @override
   String toString() => 'ImageSizeInfo($source, imageSize: $imageSize, displaySize: $displaySize)';
@@ -186,7 +185,7 @@ bool debugAssertAllPaintingVarsUnset(String reason, { bool debugDisableShadowsOv
     if (debugDisableShadows != debugDisableShadowsOverride ||
         debugNetworkImageHttpClientProvider != null ||
         debugOnPaintImage != null ||
-        debugInvertOversizedImages == true ||
+        debugInvertOversizedImages ||
         debugImageOverheadAllowance != _imageOverheadAllowanceDefault) {
       throw FlutterError(reason);
     }
@@ -200,14 +199,14 @@ bool debugAssertAllPaintingVarsUnset(String reason, { bool debugDisableShadowsOv
 /// Used by tests to run assertions on the [Picture] created by
 /// [ShaderWarmUp.execute]. The return value indicates whether the assertions
 /// pass or not.
-typedef ShaderWarmUpPictureCallback = bool Function(Picture);
+typedef ShaderWarmUpPictureCallback = bool Function(Picture picture);
 
 /// The signature of [debugCaptureShaderWarmUpImage].
 ///
 /// Used by tests to run assertions on the [Image] created by
 /// [ShaderWarmUp.execute]. The return value indicates whether the assertions
 /// pass or not.
-typedef ShaderWarmUpImageCallback = bool Function(Image);
+typedef ShaderWarmUpImageCallback = bool Function(Image image);
 
 /// Called by [ShaderWarmUp.execute] immediately after it creates a [Picture].
 ///

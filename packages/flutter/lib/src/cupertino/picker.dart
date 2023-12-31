@@ -38,16 +38,22 @@ const double _kOverAndUnderCenterOpacity = 0.447;
 ///
 /// By default, descendent texts are shown with [CupertinoTextThemeData.pickerTextStyle].
 ///
+/// {@tool dartpad}
+/// This example shows a [CupertinoPicker] that displays a list of fruits on a wheel for
+/// selection.
+///
+/// ** See code in examples/api/lib/cupertino/picker/cupertino_picker.0.dart **
+/// {@end-tool}
+///
 /// See also:
 ///
 ///  * [ListWheelScrollView], the generic widget backing this picker without
 ///    the iOS design specific chrome.
-///  * <https://developer.apple.com/ios/human-interface-guidelines/controls/pickers/>
+///  * <https://developer.apple.com/design/human-interface-guidelines/pickers/>
 class CupertinoPicker extends StatefulWidget {
   /// Creates a picker from a concrete list of children.
   ///
-  /// The [diameterRatio] and [itemExtent] arguments must not be null. The
-  /// [itemExtent] must be greater than zero.
+  /// The [itemExtent] must be greater than zero.
   ///
   /// The [backgroundColor] defaults to null, which disables background painting entirely.
   /// (i.e. the picker is going to have a completely transparent background), to match
@@ -59,11 +65,11 @@ class CupertinoPicker extends StatefulWidget {
   /// the current picker index or for selecting an initial index value.
   ///
   /// The [looping] argument decides whether the child list loops and can be
-  /// scrolled infinitely.  If set to true, scrolling past the end of the list
-  /// will loop the list back to the beginning.  If set to false, the list will
+  /// scrolled infinitely. If set to true, scrolling past the end of the list
+  /// will loop the list back to the beginning. If set to false, the list will
   /// stop scrolling when you reach the end or the beginning.
   CupertinoPicker({
-    Key? key,
+    super.key,
     this.diameterRatio = _kDefaultDiameterRatio,
     this.backgroundColor,
     this.offAxisFraction = 0.0,
@@ -76,18 +82,13 @@ class CupertinoPicker extends StatefulWidget {
     required List<Widget> children,
     this.selectionOverlay = const CupertinoPickerDefaultSelectionOverlay(),
     bool looping = false,
-  }) : assert(children != null),
-       assert(diameterRatio != null),
-       assert(diameterRatio > 0.0, RenderListWheelViewport.diameterRatioZeroMessage),
+  }) : assert(diameterRatio > 0.0, RenderListWheelViewport.diameterRatioZeroMessage),
        assert(magnification > 0),
-       assert(itemExtent != null),
        assert(itemExtent > 0),
-       assert(squeeze != null),
        assert(squeeze > 0),
        childDelegate = looping
                        ? ListWheelChildLoopingListDelegate(children: children)
-                       : ListWheelChildListDelegate(children: children),
-       super(key: key);
+                       : ListWheelChildListDelegate(children: children);
 
   /// Creates a picker from an [IndexedWidgetBuilder] callback where the builder
   /// is dynamically invoked during layout.
@@ -97,17 +98,17 @@ class CupertinoPicker extends StatefulWidget {
   /// normally the builder is only called once for each index (except when
   /// rebuilding - the cache is cleared).
   ///
-  /// The [itemBuilder] argument must not be null. The [childCount] argument
-  /// reflects the number of children that will be provided by the [itemBuilder].
+  /// The [childCount] argument reflects the number of children that will be
+  /// provided by the [itemBuilder].
   /// {@macro flutter.widgets.ListWheelChildBuilderDelegate.childCount}
   ///
-  /// The [itemExtent] argument must be non-null and positive.
+  /// The [itemExtent] argument must be positive.
   ///
   /// The [backgroundColor] defaults to null, which disables background painting entirely.
   /// (i.e. the picker is going to have a completely transparent background), to match
   /// the native UIPicker and UIDatePicker.
   CupertinoPicker.builder({
-    Key? key,
+    super.key,
     this.diameterRatio = _kDefaultDiameterRatio,
     this.backgroundColor,
     this.offAxisFraction = 0.0,
@@ -120,16 +121,11 @@ class CupertinoPicker extends StatefulWidget {
     required NullableIndexedWidgetBuilder itemBuilder,
     int? childCount,
     this.selectionOverlay = const CupertinoPickerDefaultSelectionOverlay(),
-  }) : assert(itemBuilder != null),
-       assert(diameterRatio != null),
-       assert(diameterRatio > 0.0, RenderListWheelViewport.diameterRatioZeroMessage),
+  }) : assert(diameterRatio > 0.0, RenderListWheelViewport.diameterRatioZeroMessage),
        assert(magnification > 0),
-       assert(itemExtent != null),
        assert(itemExtent > 0),
-       assert(squeeze != null),
        assert(squeeze > 0),
-       childDelegate = ListWheelChildBuilderDelegate(builder: itemBuilder, childCount: childCount),
-       super(key: key);
+       childDelegate = ListWheelChildBuilderDelegate(builder: itemBuilder, childCount: childCount);
 
   /// Relative ratio between this picker's height and the simulated cylinder's diameter.
   ///
@@ -137,7 +133,7 @@ class CupertinoPicker extends StatefulWidget {
   ///
   /// For more details, see [ListWheelScrollView.diameterRatio].
   ///
-  /// Must not be null and defaults to `1.1` to visually mimic iOS.
+  /// Defaults to 1.1 to visually mimic iOS.
   final double diameterRatio;
 
   /// Background color behind the children.
@@ -165,10 +161,12 @@ class CupertinoPicker extends StatefulWidget {
   /// If null, an implicit one will be created internally.
   final FixedExtentScrollController? scrollController;
 
+  /// {@template flutter.cupertino.picker.itemExtent}
   /// The uniform height of all children.
   ///
   /// All children will be given the [BoxConstraints] to match this exact
-  /// height. Must not be null and must be positive.
+  /// height. Must be a positive value.
+  /// {@endtemplate}
   final double itemExtent;
 
   /// {@macro flutter.rendering.RenderListWheelViewport.squeeze}
@@ -220,6 +218,7 @@ class _CupertinoPickerState extends State<CupertinoPicker> {
   void didUpdateWidget(CupertinoPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.scrollController != null && oldWidget.scrollController == null) {
+      _controller?.dispose();
       _controller = null;
     } else if (widget.scrollController == null && oldWidget.scrollController != null) {
       assert(_controller == null);
@@ -240,16 +239,13 @@ class _CupertinoPickerState extends State<CupertinoPicker> {
     switch (defaultTargetPlatform) {
       case TargetPlatform.iOS:
         hasSuitableHapticHardware = true;
-        break;
       case TargetPlatform.android:
       case TargetPlatform.fuchsia:
       case TargetPlatform.linux:
       case TargetPlatform.macOS:
       case TargetPlatform.windows:
         hasSuitableHapticHardware = false;
-        break;
     }
-    assert(hasSuitableHapticHardware != null);
     if (hasSuitableHapticHardware && index != _lastHapticIndex) {
       _lastHapticIndex = index;
       HapticFeedback.selectionClick();
@@ -276,11 +272,12 @@ class _CupertinoPickerState extends State<CupertinoPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final TextStyle textStyle = CupertinoTheme.of(context).textTheme.pickerTextStyle;
     final Color? resolvedBackgroundColor = CupertinoDynamicColor.maybeResolve(widget.backgroundColor, context);
 
     assert(RenderListWheelViewport.defaultPerspective == _kDefaultPerspective);
     final Widget result = DefaultTextStyle(
-      style: CupertinoTheme.of(context).textTheme.pickerTextStyle,
+      style: textStyle.copyWith(color: CupertinoDynamicColor.maybeResolve(textStyle.color, context)),
       child: Stack(
         children: <Widget>[
           Positioned.fill(
@@ -337,22 +334,18 @@ class CupertinoPickerDefaultSelectionOverlay extends StatelessWidget {
   /// area (or the currently selected item, depending on how you described it
   /// elsewhere) of a [CupertinoPicker].
   ///
-  /// The [background] argument default value is [CupertinoColors.tertiarySystemFill].
-  /// It must be non-null.
+  /// The [background] argument default value is
+  /// [CupertinoColors.tertiarySystemFill].
   ///
   /// The [capStartEdge] and [capEndEdge] arguments decide whether to add a
   /// default margin and use rounded corners on the left and right side of the
-  /// rectangular overlay.
-  /// Default to true and must not be null.
+  /// rectangular overlay, and they both default to true.
   const CupertinoPickerDefaultSelectionOverlay({
-    Key? key,
+    super.key,
     this.background = CupertinoColors.tertiarySystemFill,
     this.capStartEdge = true,
     this.capEndEdge = true,
-  }) : assert(background != null),
-       assert(capStartEdge != null),
-       assert(capEndEdge != null),
-       super(key: key);
+  });
 
   /// Whether to use the default use rounded corners and margin on the start side.
   final bool capStartEdge;
@@ -402,10 +395,9 @@ class CupertinoPickerDefaultSelectionOverlay extends StatelessWidget {
 // scroll controller.
 class _CupertinoPickerSemantics extends SingleChildRenderObjectWidget {
   const _CupertinoPickerSemantics({
-    Key? key,
-    Widget? child,
+    super.child,
     required this.scrollController,
-  }) : super(key: key, child: child);
+  });
 
   final FixedExtentScrollController scrollController;
 
@@ -435,12 +427,14 @@ class _RenderCupertinoPickerSemantics extends RenderProxyBox {
 
   // This method exists to allow controller to be non-null. It is only called with a null oldValue from constructor.
   void _updateController(FixedExtentScrollController? oldValue, FixedExtentScrollController value) {
-    if (value == oldValue)
+    if (value == oldValue) {
       return;
-    if (oldValue != null)
+    }
+    if (oldValue != null) {
       oldValue.removeListener(_handleScrollUpdate);
-    else
+    } else {
       _currentIndex = value.initialItem;
+    }
     value.addListener(_handleScrollUpdate);
     _controller = value;
   }
@@ -448,8 +442,9 @@ class _RenderCupertinoPickerSemantics extends RenderProxyBox {
   TextDirection get textDirection => _textDirection;
   TextDirection _textDirection;
   set textDirection(TextDirection value) {
-    if (textDirection == value)
+    if (textDirection == value) {
       return;
+    }
     _textDirection = value;
     markNeedsSemanticsUpdate();
   }
@@ -461,14 +456,13 @@ class _RenderCupertinoPickerSemantics extends RenderProxyBox {
   }
 
   void _handleDecrease() {
-    if (_currentIndex == 0)
-      return;
     controller.jumpToItem(_currentIndex - 1);
   }
 
   void _handleScrollUpdate() {
-    if (controller.selectedItem == _currentIndex)
+    if (controller.selectedItem == _currentIndex) {
       return;
+    }
     _currentIndex = controller.selectedItem;
     markNeedsSemanticsUpdate();
   }
@@ -481,8 +475,9 @@ class _RenderCupertinoPickerSemantics extends RenderProxyBox {
 
   @override
   void assembleSemanticsNode(SemanticsNode node, SemanticsConfiguration config, Iterable<SemanticsNode> children) {
-    if (children.isEmpty)
+    if (children.isEmpty) {
       return super.assembleSemanticsNode(node, config, children);
+    }
     final SemanticsNode scrollable = children.first;
     final Map<int, SemanticsNode> indexedChildren = <int, SemanticsNode>{};
     scrollable.visitChildren((SemanticsNode child) {
@@ -505,5 +500,11 @@ class _RenderCupertinoPickerSemantics extends RenderProxyBox {
       config.onDecrease = _handleDecrease;
     }
     node.updateWith(config: config);
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    controller.removeListener(_handleScrollUpdate);
   }
 }

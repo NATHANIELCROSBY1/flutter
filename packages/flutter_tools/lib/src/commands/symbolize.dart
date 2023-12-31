@@ -68,10 +68,13 @@ class SymbolizeCommand extends FlutterCommand {
     if (argResults?.wasParsed('debug-info') != true) {
       throwToolExit('"--debug-info" is required to symbolize stack traces.');
     }
-    if (!_fileSystem.isFileSync(stringArg('debug-info')!)) {
-      throwToolExit('${stringArg('debug-info')} does not exist.');
+    final String debugInfoPath = stringArg('debug-info')!;
+    if (debugInfoPath.endsWith('.dSYM')
+        ? !_fileSystem.isDirectorySync(debugInfoPath)
+        : !_fileSystem.isFileSync(debugInfoPath)) {
+      throwToolExit('$debugInfoPath does not exist.');
     }
-    if (argResults?.wasParsed('input') == true && !_fileSystem.isFileSync(stringArg('input')!)) {
+    if ((argResults?.wasParsed('input') ?? false) && !_fileSystem.isFileSync(stringArg('input')!)) {
       throwToolExit('${stringArg('input')} does not exist.');
     }
     return super.validateCommand();
@@ -83,7 +86,7 @@ class SymbolizeCommand extends FlutterCommand {
     IOSink output;
 
     // Configure output to either specified file or stdout.
-    if (argResults?.wasParsed('output') == true) {
+    if (argResults?.wasParsed('output') ?? false) {
       final File outputFile = _fileSystem.file(stringArg('output'));
       if (!outputFile.parent.existsSync()) {
         outputFile.parent.createSync(recursive: true);
@@ -99,13 +102,31 @@ class SymbolizeCommand extends FlutterCommand {
     }
 
     // Configure input from either specified file or stdin.
-    if (argResults?.wasParsed('input') == true) {
+    if (argResults?.wasParsed('input') ?? false) {
       input = _fileSystem.file(stringArg('input')).openRead();
     } else {
       input = _stdio.stdin;
     }
 
-    final Uint8List symbols = _fileSystem.file(stringArg('debug-info')).readAsBytesSync();
+    String debugInfoPath = stringArg('debug-info')!;
+
+    // If it's a dSYM container, expand the path to the actual DWARF.
+    if (debugInfoPath.endsWith('.dSYM')) {
+      final Directory debugInfoDir = _fileSystem
+        .directory(debugInfoPath)
+        .childDirectory('Contents')
+        .childDirectory('Resources')
+        .childDirectory('DWARF');
+
+      final List<FileSystemEntity> dwarfFiles = debugInfoDir.listSync().whereType<File>().toList();
+      if (dwarfFiles.length == 1) {
+        debugInfoPath = dwarfFiles.first.path;
+      } else {
+        throwToolExit('Expected a single DWARF file in a dSYM container.');
+      }
+    }
+
+    final Uint8List symbols = _fileSystem.file(debugInfoPath).readAsBytesSync();
     await _dwarfSymbolizationService.decode(
       input: input,
       output: output,
@@ -179,7 +200,7 @@ class DwarfSymbolizationService {
       .listen((String line) {
         try {
           output.writeln(line);
-        } on Exception catch(e, s) {
+        } on Exception catch (e, s) {
           subscription?.cancel().whenComplete(() {
             if (!onDone.isCompleted) {
               onDone.completeError(e, s);

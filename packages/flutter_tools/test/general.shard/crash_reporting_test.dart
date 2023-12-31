@@ -19,7 +19,6 @@ import 'package:http/testing.dart';
 import 'package:test/fake.dart';
 
 import '../src/common.dart';
-import '../src/fake_http_client.dart';
 import '../src/fake_process_manager.dart';
 
 void main() {
@@ -83,7 +82,6 @@ void main() {
       fileSystem: fs,
       logger: logger,
       flutterProjectFactory: FlutterProjectFactory(fileSystem: fs, logger: logger),
-      client: FakeHttpClient.any(),
     );
 
     final File file = fs.file('flutter_00.log');
@@ -102,7 +100,7 @@ void main() {
     expect(logger.statusText, contains('NoPIIFakeDoctorText'));
     expect(logger.statusText, isNot(contains('Ignored')));
     expect(logger.statusText, contains('https://github.com/flutter/flutter/issues/new'));
-    expect(logger.errorText, contains('A crash report has been written to ${file.path}.'));
+    expect(logger.errorText.trim(), 'A crash report has been written to ${file.path}');
   });
 
   testWithoutContext('suppress analytics', () async {

@@ -11,6 +11,7 @@ void main() {
       vsync: const TestVSync(),
       duration: const Duration(milliseconds: 300),
     );
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(Center(
       child: DualTransitionBuilder(
@@ -79,6 +80,7 @@ void main() {
       vsync: const TestVSync(),
       duration: const Duration(milliseconds: 300),
     );
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
@@ -143,6 +145,8 @@ void main() {
       vsync: const TestVSync(),
       duration: const Duration(milliseconds: 300),
     );
+    addTearDown(controller.dispose);
+
     await tester.pumpWidget(Center(
       child: DualTransitionBuilder(
         animation: controller,
@@ -208,6 +212,8 @@ void main() {
       vsync: const TestVSync(),
       duration: const Duration(milliseconds: 300),
     );
+    addTearDown(controller.dispose);
+
     await tester.pumpWidget(Center(
       child: DualTransitionBuilder(
         animation: controller,
@@ -279,7 +285,7 @@ double _getOpacity(WidgetTester tester) {
 }
 
 class _StatefulTestWidget extends StatefulWidget {
-  const _StatefulTestWidget({Key? key, required this.name}) : super(key: key);
+  const _StatefulTestWidget({required this.name});
 
   final String name;
 

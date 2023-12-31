@@ -57,7 +57,9 @@ void main() {
 
   group('RestorableTimeOfDay tests', () {
     testWidgets('value is not accessible when not registered', (WidgetTester tester) async {
-      expect(() => RestorableTimeOfDay(const TimeOfDay(hour: 20, minute: 4)).value, throwsAssertionError);
+      final RestorableTimeOfDay property = RestorableTimeOfDay(const TimeOfDay(hour: 20, minute: 4));
+      addTearDown(property.dispose);
+      expect(() => property.value, throwsAssertionError);
     });
 
     testWidgets('work when not in restoration scope', (WidgetTester tester) async {
@@ -168,7 +170,7 @@ void main() {
 }
 
 class _RestorableWidget extends StatefulWidget {
-  const _RestorableWidget({Key? key}) : super(key: key);
+  const _RestorableWidget();
 
   @override
   State<_RestorableWidget> createState() => _RestorableWidgetState();
@@ -193,4 +195,10 @@ class _RestorableWidgetState extends State<_RestorableWidget> with RestorationMi
 
   @override
   String get restorationId => 'widget';
+
+  @override
+  void dispose() {
+    timeOfDay.dispose();
+    super.dispose();
+  }
 }

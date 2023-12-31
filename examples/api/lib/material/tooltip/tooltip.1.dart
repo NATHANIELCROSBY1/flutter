@@ -2,33 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flutter code sample for Tooltip
-
 import 'package:flutter/material.dart';
 
-void main() => runApp(const MyApp());
+/// Flutter code sample for [Tooltip].
 
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+void main() => runApp(const TooltipExampleApp());
 
-  static const String _title = 'Flutter Code Sample';
+class TooltipExampleApp extends StatelessWidget {
+  const TooltipExampleApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: _title,
+      theme: ThemeData(tooltipTheme: const TooltipThemeData(preferBelow: false)),
       home: Scaffold(
-        appBar: AppBar(title: const Text(_title)),
+        appBar: AppBar(title: const Text('Tooltip Sample')),
         body: const Center(
-          child: MyStatelessWidget(),
+          child: TooltipSample(),
         ),
       ),
     );
   }
 }
 
-class MyStatelessWidget extends StatelessWidget {
-  const MyStatelessWidget({Key? key}) : super(key: key);
+class TooltipSample extends StatelessWidget {
+  const TooltipSample({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -36,12 +34,11 @@ class MyStatelessWidget extends StatelessWidget {
       message: 'I am a Tooltip',
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(25),
-        gradient:
-            const LinearGradient(colors: <Color>[Colors.amber, Colors.red]),
+        gradient: const LinearGradient(colors: <Color>[Colors.amber, Colors.red]),
       ),
       height: 50,
       padding: const EdgeInsets.all(8.0),
-      preferBelow: false,
+      preferBelow: true,
       textStyle: const TextStyle(
         fontSize: 24,
       ),

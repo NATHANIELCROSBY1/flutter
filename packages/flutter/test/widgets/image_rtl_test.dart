@@ -8,8 +8,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../rendering/mock_canvas.dart';
-
 class TestImageProvider extends ImageProvider<TestImageProvider> {
   const TestImageProvider(this.image);
 
@@ -21,7 +19,7 @@ class TestImageProvider extends ImageProvider<TestImageProvider> {
   }
 
   @override
-  ImageStreamCompleter load(TestImageProvider key, DecoderCallback decode) {
+  ImageStreamCompleter loadImage(TestImageProvider key, ImageDecoderCallback decode) {
     return OneFrameImageStreamCompleter(
       SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
     );
@@ -30,9 +28,15 @@ class TestImageProvider extends ImageProvider<TestImageProvider> {
 
 void main() {
   late ui.Image testImage;
+
   setUpAll(() async {
     testImage = await createTestImage(width: 16, height: 9);
   });
+
+  tearDownAll(() {
+    testImage.dispose();
+  });
+
   testWidgets('DecorationImage RTL with alignment topEnd and match', (WidgetTester tester) async {
     await tester.pumpWidget(
       Directionality(

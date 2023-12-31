@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
 import 'package:args/args.dart';
 import 'package:conductor_core/src/stdio.dart';
 import 'package:test/test.dart';
 
+export 'package:test/fake.dart';
 export 'package:test/test.dart' hide isInstanceOf;
 export '../../../../packages/flutter_tools/test/src/fake_process_manager.dart';
 

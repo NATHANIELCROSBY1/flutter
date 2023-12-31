@@ -79,11 +79,14 @@ void main() {
     }
 
     Widget buildWidget() {
+      final ScrollController controller = ScrollController(initialScrollOffset: 300.0);
+      addTearDown(controller.dispose);
+
       return Directionality(
         textDirection: TextDirection.ltr,
         child: FlipWidget(
           left: ListView.builder(
-            controller: ScrollController(initialScrollOffset: 300.0),
+            controller: controller,
             itemExtent: 200.0,
             itemBuilder: itemBuilder,
           ),
@@ -152,11 +155,14 @@ void main() {
     }
 
     Widget buildWidget() {
+      final ScrollController controller = ScrollController(initialScrollOffset: 300.0);
+      addTearDown(controller.dispose);
+
       return Directionality(
         textDirection: TextDirection.ltr,
         child: FlipWidget(
           left: ListView.builder(
-            controller: ScrollController(initialScrollOffset: 300.0),
+            controller: controller,
             itemBuilder: itemBuilder,
             itemExtent: 200.0,
             scrollDirection: Axis.horizontal,
@@ -347,8 +353,9 @@ void main() {
 
     // ListView's height is 600, so items i0-i5 and s0-s4 fit.
     await tester.pumpWidget(buildFrame(itemCount: 25));
-    for (final String s in <String>['i0', 's0', 'i1', 's1', 'i2', 's2', 'i3', 's3', 'i4', 's4', 'i5'])
+    for (final String s in <String>['i0', 's0', 'i1', 's1', 'i2', 's2', 'i3', 's3', 'i4', 's4', 'i5']) {
       expect(find.text(s), findsOneWidget);
+    }
     expect(find.text('s5'), findsNothing);
     expect(find.text('i6'), findsNothing);
   });

@@ -7,8 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../rendering/mock_canvas.dart';
-
 Widget boilerplate({required Widget child}) {
   return Directionality(
     textDirection: TextDirection.ltr,
@@ -20,6 +18,12 @@ void main() {
   test('ToggleButtonsThemeData copyWith, ==, hashCode basics', () {
     expect(const ToggleButtonsThemeData(), const ToggleButtonsThemeData().copyWith());
     expect(const ToggleButtonsThemeData().hashCode, const ToggleButtonsThemeData().copyWith().hashCode);
+  });
+
+  test('ToggleButtonsThemeData lerp special cases', () {
+    expect(ToggleButtonsThemeData.lerp(null, null, 0), null);
+    const ToggleButtonsThemeData data = ToggleButtonsThemeData();
+    expect(identical(ToggleButtonsThemeData.lerp(data, data, 0.5), data), true);
   });
 
   test('ToggleButtonsThemeData defaults', () {
@@ -142,15 +146,15 @@ void main() {
 
     TextStyle textStyle;
     textStyle = tester.widget<DefaultTextStyle>(find.descendant(
-        of: find.widgetWithText(RawMaterialButton, 'First child'),
-        matching: find.byType(DefaultTextStyle),
+      of: find.widgetWithText(TextButton, 'First child'),
+      matching: find.byType(DefaultTextStyle),
     )).style;
     expect(textStyle.textBaseline, TextBaseline.ideographic);
     expect(textStyle.fontSize, 20.0);
     expect(textStyle.color, isNot(Colors.orange));
 
     textStyle = tester.widget<DefaultTextStyle>(find.descendant(
-        of: find.widgetWithText(RawMaterialButton, 'Second child'),
+        of: find.widgetWithText(TextButton, 'Second child'),
         matching: find.byType(DefaultTextStyle),
     )).style;
     expect(textStyle.textBaseline, TextBaseline.ideographic);
@@ -171,6 +175,7 @@ void main() {
               ),
             ),
             child: ToggleButtons(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               isSelected: const <bool>[false, false, false],
               onPressed: (int index) {},
               children: const <Widget>[
@@ -184,13 +189,13 @@ void main() {
       ),
     );
 
-    Rect firstRect = tester.getRect(find.byType(RawMaterialButton).at(0));
+    Rect firstRect = tester.getRect(find.byType(TextButton).at(0));
     expect(firstRect.width, 50.0);
     expect(firstRect.height, 60.0);
-    Rect secondRect = tester.getRect(find.byType(RawMaterialButton).at(1));
+    Rect secondRect = tester.getRect(find.byType(TextButton).at(1));
     expect(secondRect.width, 50.0);
     expect(secondRect.height, 60.0);
-    Rect thirdRect = tester.getRect(find.byType(RawMaterialButton).at(2));
+    Rect thirdRect = tester.getRect(find.byType(TextButton).at(2));
     expect(thirdRect.width, 50.0);
     expect(thirdRect.height, 60.0);
 
@@ -206,6 +211,7 @@ void main() {
               ),
             ),
             child: ToggleButtons(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               isSelected: const <bool>[false, false, false],
               onPressed: (int index) {},
               children: const <Widget>[
@@ -219,13 +225,13 @@ void main() {
       ),
     );
 
-    firstRect = tester.getRect(find.byType(RawMaterialButton).at(0));
+    firstRect = tester.getRect(find.byType(TextButton).at(0));
     expect(firstRect.width, 20.0);
     expect(firstRect.height, 10.0);
-    secondRect = tester.getRect(find.byType(RawMaterialButton).at(1));
+    secondRect = tester.getRect(find.byType(TextButton).at(1));
     expect(secondRect.width, 20.0);
     expect(secondRect.height, 10.0);
-    thirdRect = tester.getRect(find.byType(RawMaterialButton).at(2));
+    thirdRect = tester.getRect(find.byType(TextButton).at(2));
     expect(thirdRect.width, 20.0);
     expect(thirdRect.height, 10.0);
   });
@@ -235,13 +241,13 @@ void main() {
     (WidgetTester tester) async {
       TextStyle buttonTextStyle(String text) {
         return tester.widget<DefaultTextStyle>(find.descendant(
-          of: find.widgetWithText(RawMaterialButton, text),
+          of: find.widgetWithText(TextButton, text),
           matching: find.byType(DefaultTextStyle),
         )).style;
       }
       IconTheme iconTheme(IconData icon) {
         return tester.widget(find.descendant(
-          of: find.widgetWithIcon(RawMaterialButton, icon),
+          of: find.widgetWithIcon(TextButton, icon),
           matching: find.byType(IconTheme),
         ));
       }
@@ -259,10 +265,10 @@ void main() {
                 color: enabledColor,
                 isSelected: const <bool>[false],
                 onPressed: (int index) {},
-                children: <Widget>[
+                children: const <Widget>[
                   // This Row is used like this to test for both TextStyle
                   // and IconTheme for Text and Icon widgets respectively.
-                  Row(children: const <Widget>[
+                  Row(children: <Widget>[
                     Text('First child'),
                     Icon(Icons.check),
                   ]),
@@ -288,8 +294,8 @@ void main() {
                 color: enabledColor,
                 isSelected: const <bool>[true],
                 onPressed: (int index) {},
-                children: <Widget>[
-                  Row(children: const <Widget>[
+                children: const <Widget>[
+                  Row(children: <Widget>[
                     Text('First child'),
                     Icon(Icons.check),
                   ]),
@@ -315,8 +321,8 @@ void main() {
               child: ToggleButtons(
                 color: enabledColor,
                 isSelected: const <bool>[false],
-                children: <Widget>[
-                  Row(children: const <Widget>[
+                children: const <Widget>[
+                  Row(children: <Widget>[
                     Text('First child'),
                     Icon(Icons.check),
                   ]),
@@ -344,8 +350,8 @@ void main() {
             child: ToggleButtons(
               isSelected: const <bool>[true],
               onPressed: (int index) {},
-              children: <Widget>[
-                Row(children: const <Widget>[
+              children: const <Widget>[
+                Row(children: <Widget>[
                   Text('First child'),
                 ]),
               ],
@@ -356,7 +362,7 @@ void main() {
     );
 
     final Material material = tester.widget<Material>(find.descendant(
-      of: find.byType(RawMaterialButton),
+      of: find.byType(TextButton),
       matching: find.byType(Material),
     ));
     expect(material.color, customFillColor);
@@ -367,7 +373,7 @@ void main() {
     Material buttonColor(String text) {
       return tester.widget<Material>(
         find.descendant(
-          of: find.byType(RawMaterialButton),
+          of: find.byType(TextButton),
           matching: find.widgetWithText(Material, text),
         ),
       );
@@ -476,7 +482,6 @@ void main() {
       inkFeatures,
       paints
         ..circle(color: splashColor)
-        ..rect(color: highlightColor),
     );
 
     await touchGesture.up();
@@ -505,8 +510,9 @@ void main() {
     expect(inkFeatures, paints..rect(color: focusColor));
 
     await hoverGesture.removePointer();
-  });
 
+    focusNode.dispose();
+  });
 
   testWidgets(
     'Theme border width and border colors for enabled, selected and disabled states',
@@ -543,6 +549,8 @@ void main() {
       expect(
         toggleButtonRenderObject,
         paints
+          // physical model layer paint
+          ..path()
           ..path(
             style: PaintingStyle.stroke,
             color: borderColor,
@@ -576,6 +584,8 @@ void main() {
       expect(
         toggleButtonRenderObject,
         paints
+          // physical model layer paint
+          ..path()
           ..path(
             style: PaintingStyle.stroke,
             color: selectedBorderColor,
@@ -608,6 +618,8 @@ void main() {
       expect(
         toggleButtonRenderObject,
         paints
+          // physical model layer paint
+          ..path()
           ..path(
             style: PaintingStyle.stroke,
             color: disabledBorderColor,

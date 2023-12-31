@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   // Pumps and ensures that the BottomSheet animates non-linearly.
-  Future<void> _checkNonLinearAnimation(WidgetTester tester) async {
+  Future<void> checkNonLinearAnimation(WidgetTester tester) async {
     final Offset firstPosition = tester.getCenter(find.text('One'));
     await tester.pump(const Duration(milliseconds: 30));
     final Offset secondPosition = tester.getCenter(find.text('One'));
@@ -22,6 +22,79 @@ void main() {
     expect(dyDelta1, isNot(moreOrLessEquals(dyDelta2, epsilon: 0.1)));
   }
 
+  testWidgets('Persistent draggableScrollableSheet localHistoryEntries test', (WidgetTester tester) async {
+    // Regression test for https://github.com/flutter/flutter/issues/110123
+    Widget buildFrame(Widget? bottomSheet) {
+      return MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(),
+          body: const Center(child: Text('body')),
+          bottomSheet: bottomSheet,
+          floatingActionButton: const FloatingActionButton(
+            onPressed: null,
+            child: Text('fab'),
+          ),
+        ),
+      );
+    }
+    final Widget draggableScrollableSheet = DraggableScrollableSheet(
+      expand: false,
+      snap: true,
+      initialChildSize: 0.3,
+      minChildSize: 0.3,
+      builder: (_, ScrollController controller) {
+        return ListView.builder(
+          itemExtent: 50.0,
+          itemCount: 50,
+          itemBuilder: (_, int index) => Text('Item $index'),
+          controller: controller,
+        );
+      },
+    );
+
+    await tester.pumpWidget(buildFrame(draggableScrollableSheet));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BackButton).hitTestable(), findsNothing);
+
+    await tester.drag(find.text('Item 2'), const Offset(0, -200.0));
+    await tester.pumpAndSettle();
+    // We've started to drag up, we should have a back button now for a11y
+    expect(find.byType(BackButton).hitTestable(), findsOneWidget);
+
+    await tester.fling(find.text('Item 2'), const Offset(0, 200.0), 2000.0);
+    await tester.pumpAndSettle();
+    // BackButton should be hidden
+    expect(find.byType(BackButton).hitTestable(), findsNothing);
+
+    // Show the back button again
+    await tester.drag(find.text('Item 2'), const Offset(0, -200.0));
+    await tester.pumpAndSettle();
+    expect(find.byType(BackButton).hitTestable(), findsOneWidget);
+
+    // Remove the draggableScrollableSheet should hide the back button
+    await tester.pumpWidget(buildFrame(null));
+    expect(find.byType(BackButton).hitTestable(), findsNothing);
+  });
+
+  // Regression test for https://github.com/flutter/flutter/issues/83668
+  testWidgets('Scaffold.bottomSheet update test', (WidgetTester tester) async {
+    Widget buildFrame(Widget? bottomSheet) {
+      return MaterialApp(
+        home: Scaffold(
+          body: const Placeholder(),
+          bottomSheet: bottomSheet,
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildFrame(const Text('I love Flutter!')));
+    await tester.pumpWidget(buildFrame(null));
+
+    // The disappearing animation has not yet been completed.
+    await tester.pumpWidget(buildFrame(const Text('I love Flutter!')));
+  });
+
   testWidgets('Verify that a BottomSheet can be rebuilt with ScaffoldFeatureController.setState()', (WidgetTester tester) async {
     final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
     int buildCount = 0;
@@ -33,7 +106,7 @@ void main() {
       ),
     ));
 
-    final PersistentBottomSheetController<void> bottomSheet = scaffoldKey.currentState!.showBottomSheet<void>((_) {
+    final PersistentBottomSheetController bottomSheet = scaffoldKey.currentState!.showBottomSheet((_) {
       return Builder(
         builder: (BuildContext context) {
           buildCount += 1;
@@ -90,7 +163,7 @@ void main() {
       ),
     ));
 
-    scaffoldKey.currentState!.showBottomSheet<void>((BuildContext context) {
+    scaffoldKey.currentState!.showBottomSheet((BuildContext context) {
       return ListView(
         shrinkWrap: true,
         primary: false,
@@ -112,6 +185,44 @@ void main() {
     expect(find.text('Two'), findsNothing);
   });
 
+  testWidgets('Verify DraggableScrollableSheet.shouldCloseOnMinExtent == false prevents dismissal', (WidgetTester tester) async {
+    final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        key: scaffoldKey,
+        body: const Center(child: Text('body')),
+      ),
+    ));
+
+    scaffoldKey.currentState!.showBottomSheet((BuildContext context) {
+      return DraggableScrollableSheet(
+        expand: false,
+        shouldCloseOnMinExtent: false,
+        builder: (_, ScrollController controller) {
+          return ListView(
+            controller: controller,
+            shrinkWrap: true,
+            children: const <Widget>[
+              SizedBox(height: 100.0, child: Text('One')),
+              SizedBox(height: 100.0, child: Text('Two')),
+              SizedBox(height: 100.0, child: Text('Three')),
+            ],
+          );
+        },
+      );
+    });
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Two'), findsOneWidget);
+
+    await tester.drag(find.text('Two'), const Offset(0.0, 400.0));
+    await tester.pumpAndSettle();
+
+     expect(find.text('Two'), findsOneWidget);
+  });
+
   testWidgets('Verify that a BottomSheet animates non-linearly', (WidgetTester tester) async {
     final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -122,7 +233,7 @@ void main() {
       ),
     ));
 
-    scaffoldKey.currentState!.showBottomSheet<void>((BuildContext context) {
+    scaffoldKey.currentState!.showBottomSheet((BuildContext context) {
       return ListView(
         shrinkWrap: true,
         primary: false,
@@ -134,14 +245,14 @@ void main() {
       );
     });
     await tester.pump();
-    await _checkNonLinearAnimation(tester);
+    await checkNonLinearAnimation(tester);
 
     await tester.pumpAndSettle();
 
     expect(find.text('Two'), findsOneWidget);
 
     await tester.drag(find.text('Two'), const Offset(0.0, 200.0));
-    await _checkNonLinearAnimation(tester);
+    await checkNonLinearAnimation(tester);
     await tester.pumpAndSettle();
 
     expect(find.text('Two'), findsNothing);
@@ -157,7 +268,7 @@ void main() {
       ),
     ));
 
-    scaffoldKey.currentState!.showBottomSheet<void>(
+    scaffoldKey.currentState!.showBottomSheet(
       (BuildContext context) {
         return DraggableScrollableSheet(
           expand: false,
@@ -311,7 +422,7 @@ void main() {
       ),
     ));
 
-    scaffoldKey.currentState!.showBottomSheet<void>(
+    scaffoldKey.currentState!.showBottomSheet(
       (BuildContext context) {
         return DraggableScrollableSheet(
           expand: false,
@@ -360,7 +471,7 @@ void main() {
     ));
 
     int buildCount = 0;
-    showBottomSheet<void>(
+    showBottomSheet(
       context: key.currentContext!,
       builder: (BuildContext context) {
         return Builder(
@@ -398,7 +509,7 @@ void main() {
 
     await tester.pump();
 
-    showBottomSheet<void>(
+    showBottomSheet(
       context: scaffoldContext,
       builder: (BuildContext context) {
         bottomSheetContext = context;
@@ -423,6 +534,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(useMaterial3: false),
         home: Scaffold(
           body: const Placeholder(),
           bottomSheet: Container(
@@ -514,7 +626,7 @@ void main() {
       ),
     ));
 
-    scaffoldKey.currentState!.showBottomSheet<void>((BuildContext context) {
+    scaffoldKey.currentState!.showBottomSheet((BuildContext context) {
       return ListView(
         shrinkWrap: true,
         primary: false,
@@ -544,7 +656,7 @@ void main() {
       ),
     ));
 
-    final PersistentBottomSheetController<void> bottomSheet = scaffoldKey.currentState!.showBottomSheet<void>((_) {
+    final PersistentBottomSheetController bottomSheet = scaffoldKey.currentState!.showBottomSheet((_) {
       return Builder(
         builder: (BuildContext context) {
           return Container(height: 200.0);

@@ -3,13 +3,15 @@
 // found in the LICENSE file.
 
 @TestOn('!chrome')
+library;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class OnTapPage extends StatelessWidget {
-  const OnTapPage({Key? key, required this.id, required this.onTap}) : super(key: key);
+  const OnTapPage({super.key, required this.id, required this.onTap});
 
   final String id;
   final VoidCallback onTap;
@@ -22,18 +24,11 @@ class OnTapPage extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: Center(
-          child: Text(id, style: Theme.of(context).textTheme.headline3),
+          child: Text(id, style: Theme.of(context).textTheme.displaySmall),
         ),
       ),
     );
   }
-}
-
-Map<String, dynamic> convertRouteInformationToMap(RouteInformation routeInformation) {
-  return <String, dynamic>{
-    'location': routeInformation.location,
-    'state': routeInformation.state,
-  };
 }
 
 void main() {
@@ -68,7 +63,7 @@ void main() {
       isMethodCall('selectSingleEntryHistory', arguments: null),
       isMethodCall('routeInformationUpdated',
         arguments: <String, dynamic>{
-          'location': '/',
+          'uri': '/',
           'state': null,
           'replace': false,
         },
@@ -86,7 +81,7 @@ void main() {
       isMethodCall(
         'routeInformationUpdated',
         arguments: <String, dynamic>{
-          'location': '/A',
+          'uri': '/A',
           'state': null,
           'replace': false,
         },
@@ -104,7 +99,7 @@ void main() {
       isMethodCall(
         'routeInformationUpdated',
         arguments: <String, dynamic>{
-          'location': '/',
+          'uri': '/',
           'state': null,
           'replace': false,
         },
@@ -178,7 +173,7 @@ void main() {
       isMethodCall('selectSingleEntryHistory', arguments: null),
       isMethodCall('routeInformationUpdated',
         arguments: <String, dynamic>{
-          'location': '/',
+          'uri': '/',
           'state': null,
           'replace': false,
         },
@@ -196,7 +191,7 @@ void main() {
       isMethodCall(
         'routeInformationUpdated',
         arguments: <String, dynamic>{
-          'location': '/A',
+          'uri': '/A',
           'state': null,
           'replace': false,
         },
@@ -214,7 +209,7 @@ void main() {
       isMethodCall(
         'routeInformationUpdated',
         arguments: <String, dynamic>{
-          'location': '/B',
+          'uri': '/B',
           'state': null,
           'replace': false,
         },
@@ -251,7 +246,7 @@ void main() {
       isMethodCall('selectSingleEntryHistory', arguments: null),
       isMethodCall('routeInformationUpdated',
         arguments: <String, dynamic>{
-          'location': '/home',
+          'uri': '/home',
           'state': null,
           'replace': false,
         },
@@ -274,16 +269,18 @@ void main() {
     });
 
     final PlatformRouteInformationProvider provider = PlatformRouteInformationProvider(
-      initialRouteInformation: const RouteInformation(
-        location: 'initial',
+      initialRouteInformation: RouteInformation(
+        uri: Uri.parse('initial'),
       ),
     );
+    addTearDown(provider.dispose);
     final SimpleRouterDelegate delegate = SimpleRouterDelegate(
       reportConfiguration: true,
       builder: (BuildContext context, RouteInformation information) {
-        return Text(information.location!);
+        return Text(information.uri.toString());
       },
     );
+    addTearDown(delegate.dispose);
 
     await tester.pumpWidget(MaterialApp.router(
       routeInformationProvider: provider,
@@ -294,7 +291,7 @@ void main() {
     expect(log, <Object>[
       isMethodCall('selectMultiEntryHistory', arguments: null),
       isMethodCall('routeInformationUpdated', arguments: <String, dynamic>{
-        'location': 'initial',
+        'uri': 'initial',
         'state': null,
         'replace': false,
       }),
@@ -303,8 +300,8 @@ void main() {
 
     // Triggers a router rebuild and verify the route information is reported
     // to the web engine.
-    delegate.routeInformation = const RouteInformation(
-      location: 'update',
+    delegate.routeInformation = RouteInformation(
+      uri: Uri.parse('update'),
       state: 'state',
     );
     await tester.pump();
@@ -313,7 +310,7 @@ void main() {
     expect(log, <Object>[
       isMethodCall('selectMultiEntryHistory', arguments: null),
       isMethodCall('routeInformationUpdated', arguments: <String, dynamic>{
-        'location': 'update',
+        'uri': 'update',
         'state': 'state',
         'replace': false,
       }),
@@ -321,7 +318,7 @@ void main() {
   });
 }
 
-typedef SimpleRouterDelegateBuilder = Widget Function(BuildContext, RouteInformation);
+typedef SimpleRouterDelegateBuilder = Widget Function(BuildContext context, RouteInformation information);
 typedef SimpleRouterDelegatePopRoute = Future<bool> Function();
 
 class SimpleRouteInformationParser extends RouteInformationParser<RouteInformation> {
@@ -343,7 +340,11 @@ class SimpleRouterDelegate extends RouterDelegate<RouteInformation> with ChangeN
     required this.builder,
     this.onPopRoute,
     this.reportConfiguration = false,
-  });
+  }) {
+    if (kFlutterMemoryAllocationsEnabled) {
+      ChangeNotifier.maybeDispatchObjectCreation(this);
+    }
+  }
 
   RouteInformation get routeInformation => _routeInformation;
   late RouteInformation _routeInformation;
@@ -358,8 +359,9 @@ class SimpleRouterDelegate extends RouterDelegate<RouteInformation> with ChangeN
 
   @override
   RouteInformation? get currentConfiguration {
-    if (reportConfiguration)
+    if (reportConfiguration) {
       return routeInformation;
+    }
     return null;
   }
 
@@ -371,8 +373,9 @@ class SimpleRouterDelegate extends RouterDelegate<RouteInformation> with ChangeN
 
   @override
   Future<bool> popRoute() {
-    if (onPopRoute != null)
+    if (onPopRoute != null) {
       return onPopRoute!();
+    }
     return SynchronousFuture<bool>(true);
   }
 
@@ -381,7 +384,7 @@ class SimpleRouterDelegate extends RouterDelegate<RouteInformation> with ChangeN
 }
 
 class TestPage extends Page<void> {
-  const TestPage({LocalKey? key, String? name}) : super(key: key, name: name);
+  const TestPage({super.key, super.name});
 
   @override
   Route<void> createRoute(BuildContext context) {

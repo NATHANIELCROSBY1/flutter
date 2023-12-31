@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:unified_analytics/unified_analytics.dart';
+
 import '../android/android_builder.dart';
 import '../android/build_validation.dart';
 import '../android/deferred_components_prebuild_validator.dart';
@@ -18,6 +20,7 @@ import 'build.dart';
 
 class BuildAppBundleCommand extends BuildSubCommand {
   BuildAppBundleCommand({
+    required super.logger,
     bool verboseHelp = false,
   }) : super(verboseHelp: verboseHelp) {
     addTreeShakeIconsFlag();
@@ -105,6 +108,29 @@ class BuildAppBundleCommand extends BuildSubCommand {
   }
 
   @override
+  Future<Event> unifiedAnalyticsUsageValues(String commandPath) async {
+    final String buildMode;
+
+    if (boolArg('release')) {
+      buildMode = 'release';
+    } else if (boolArg('debug')) {
+      buildMode = 'debug';
+    } else if (boolArg('profile')) {
+      buildMode = 'profile';
+    } else {
+      // The build defaults to release.
+      buildMode = 'release';
+    }
+
+    return Event.commandUsageValues(
+      workflow: commandPath,
+      commandHasTerminal: hasTerminal,
+      buildAppBundleTargetPlatform: stringsArg('target-platform').join(','),
+      buildAppBundleBuildMode: buildMode,
+    );
+  }
+
+  @override
   Future<FlutterCommandResult> runCommand() async {
     if (globals.androidSdk == null) {
       exitWithNoSdkMessage();
@@ -138,7 +164,7 @@ class BuildAppBundleCommand extends BuildSubCommand {
           .childDirectory(component.name)
           .childDirectory('intermediates')
           .childDirectory('flutter')
-          .childDirectory(androidBuildInfo.buildInfo.mode.name)
+          .childDirectory(androidBuildInfo.buildInfo.mode.cliName)
           .childDirectory('deferred_libs');
         if (deferredLibsIntermediate.existsSync()) {
           deferredLibsIntermediate.deleteSync(recursive: true);

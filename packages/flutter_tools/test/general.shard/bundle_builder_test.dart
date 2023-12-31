@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:file/memory.dart';
 import 'package:flutter_tools/src/base/config.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
@@ -71,7 +69,7 @@ void main() {
     final String mainPath = globals.fs.path.join('lib', 'main.dart');
     const String assetDirPath = 'example';
     const String depfilePath = 'example.d';
-    Environment env;
+    Environment? env;
     final BuildSystem buildSystem = TestBuildSystem.all(
       BuildResult(success: true),
       (Target target, Environment environment) {
@@ -89,6 +87,7 @@ void main() {
         BuildMode.debug,
         null,
         trackWidgetCreation: true,
+        frontendServerStarterPath: 'path/to/frontend_server_starter.dart',
         extraFrontEndOptions: <String>['test1', 'test2'],
         extraGenSnapshotOptions: <String>['test3', 'test4'],
         fileSystemRoots: <String>['test5', 'test6'],
@@ -104,30 +103,31 @@ void main() {
     );
 
     expect(env, isNotNull);
-    expect(env.defines[kBuildMode], 'debug');
-    expect(env.defines[kTargetPlatform], 'ios');
-    expect(env.defines[kTargetFile], mainPath);
-    expect(env.defines[kTrackWidgetCreation], 'true');
-    expect(env.defines[kExtraFrontEndOptions], 'test1,test2');
-    expect(env.defines[kExtraGenSnapshotOptions], 'test3,test4');
-    expect(env.defines[kFileSystemRoots], 'test5,test6');
-    expect(env.defines[kFileSystemScheme], 'test7');
-    expect(env.defines[kDartDefines], encodeDartDefines(<String>['test8', 'test9']));
-    expect(env.defines[kIconTreeShakerFlag], 'true');
-    expect(env.defines[kDeferredComponents], 'false');
+    expect(env!.defines[kBuildMode], 'debug');
+    expect(env!.defines[kTargetPlatform], 'ios');
+    expect(env!.defines[kTargetFile], mainPath);
+    expect(env!.defines[kTrackWidgetCreation], 'true');
+    expect(env!.defines[kFrontendServerStarterPath], 'path/to/frontend_server_starter.dart');
+    expect(env!.defines[kExtraFrontEndOptions], 'test1,test2');
+    expect(env!.defines[kExtraGenSnapshotOptions], 'test3,test4');
+    expect(env!.defines[kFileSystemRoots], 'test5,test6');
+    expect(env!.defines[kFileSystemScheme], 'test7');
+    expect(env!.defines[kDartDefines], encodeDartDefines(<String>['test8', 'test9']));
+    expect(env!.defines[kIconTreeShakerFlag], 'true');
+    expect(env!.defines[kDeferredComponents], 'false');
   }, overrides: <Type, Generator>{
     FileSystem: () => MemoryFileSystem.test(),
     ProcessManager: () => FakeProcessManager.any(),
   });
 
-  testWithoutContext('--flutter-widget-cache and --enable-experiment are removed from getDefaultCachedKernelPath hash', () {
+  testWithoutContext('--enable-experiment is removed from getDefaultCachedKernelPath hash', () {
     final FileSystem fileSystem = MemoryFileSystem.test();
     final Config config = Config.test();
 
     expect(getDefaultCachedKernelPath(
       trackWidgetCreation: true,
       dartDefines: <String>[],
-      extraFrontEndOptions: <String>['--enable-experiment=foo', '--flutter-widget-cache'],
+      extraFrontEndOptions: <String>['--enable-experiment=foo'],
       fileSystem: fileSystem,
       config: config,
     ), 'build/cache.dill.track.dill');
@@ -135,7 +135,7 @@ void main() {
     expect(getDefaultCachedKernelPath(
       trackWidgetCreation: true,
       dartDefines: <String>['foo=bar'],
-      extraFrontEndOptions: <String>['--enable-experiment=foo', '--flutter-widget-cache'],
+      extraFrontEndOptions: <String>['--enable-experiment=foo'],
       fileSystem: fileSystem,
       config: config,
     ), 'build/06ad47d8e64bd28de537b62ff85357c4.cache.dill.track.dill');
@@ -143,7 +143,7 @@ void main() {
     expect(getDefaultCachedKernelPath(
       trackWidgetCreation: false,
       dartDefines: <String>[],
-      extraFrontEndOptions: <String>['--enable-experiment=foo', '--flutter-widget-cache'],
+      extraFrontEndOptions: <String>['--enable-experiment=foo'],
       fileSystem: fileSystem,
       config: config,
     ), 'build/cache.dill');
@@ -151,7 +151,7 @@ void main() {
     expect(getDefaultCachedKernelPath(
       trackWidgetCreation: true,
       dartDefines: <String>[],
-      extraFrontEndOptions: <String>['--enable-experiment=foo', '--flutter-widget-cache', '--foo=bar'],
+      extraFrontEndOptions: <String>['--enable-experiment=foo', '--foo=bar'],
       fileSystem: fileSystem,
       config: config,
     ), 'build/95b595cca01caa5f0ca0a690339dd7f6.cache.dill.track.dill');

@@ -9,32 +9,28 @@ import 'routes.dart';
 /// Registers a callback to veto attempts by the user to dismiss the enclosing
 /// [ModalRoute].
 ///
-/// {@tool dartpad}
-/// Whenever the back button is pressed, you will get a callback at [onWillPop],
-/// which returns a [Future]. If the [Future] returns true, the screen is
-/// popped.
-///
-/// ** See code in examples/api/lib/widgets/will_pop_scope/will_pop_scope.0.dart **
-/// {@end-tool}
-///
 /// See also:
 ///
 ///  * [ModalRoute.addScopedWillPopCallback] and [ModalRoute.removeScopedWillPopCallback],
 ///    which this widget uses to register and unregister [onWillPop].
 ///  * [Form], which provides an `onWillPop` callback that enables the form
 ///    to veto a `pop` initiated by the app's back button.
-///
+@Deprecated(
+  'Use PopScope instead. '
+  'This feature was deprecated after v3.12.0-1.0.pre.',
+)
 class WillPopScope extends StatefulWidget {
   /// Creates a widget that registers a callback to veto attempts by the user to
   /// dismiss the enclosing [ModalRoute].
-  ///
-  /// The [child] argument must not be null.
+  @Deprecated(
+    'Use PopScope instead. '
+    'This feature was deprecated after v3.12.0-1.0.pre.',
+  )
   const WillPopScope({
-    Key? key,
+    super.key,
     required this.child,
     required this.onWillPop,
-  }) : assert(child != null),
-       super(key: key);
+  });
 
   /// The widget below this widget in the tree.
   ///
@@ -57,28 +53,33 @@ class _WillPopScopeState extends State<WillPopScope> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (widget.onWillPop != null)
+    if (widget.onWillPop != null) {
       _route?.removeScopedWillPopCallback(widget.onWillPop!);
+    }
     _route = ModalRoute.of(context);
-    if (widget.onWillPop != null)
+    if (widget.onWillPop != null) {
       _route?.addScopedWillPopCallback(widget.onWillPop!);
+    }
   }
 
   @override
   void didUpdateWidget(WillPopScope oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.onWillPop != oldWidget.onWillPop && _route != null) {
-      if (oldWidget.onWillPop != null)
+      if (oldWidget.onWillPop != null) {
         _route!.removeScopedWillPopCallback(oldWidget.onWillPop!);
-      if (widget.onWillPop != null)
+      }
+      if (widget.onWillPop != null) {
         _route!.addScopedWillPopCallback(widget.onWillPop!);
+      }
     }
   }
 
   @override
   void dispose() {
-    if (widget.onWillPop != null)
+    if (widget.onWillPop != null) {
       _route?.removeScopedWillPopCallback(widget.onWillPop!);
+    }
     super.dispose();
   }
 

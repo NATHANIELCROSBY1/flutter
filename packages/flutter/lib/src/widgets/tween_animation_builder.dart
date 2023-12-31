@@ -93,25 +93,19 @@ import 'value_listenable_builder.dart';
 class TweenAnimationBuilder<T extends Object?> extends ImplicitlyAnimatedWidget {
   /// Creates a [TweenAnimationBuilder].
   ///
-  /// The properties [tween], [duration], and [builder] are required. The values
-  /// for [tween], [curve], and [builder] must not be null.
-  ///
   /// The [TweenAnimationBuilder] takes full ownership of the provided [tween]
   /// instance and mutates it. Once a [Tween] has been passed to a
   /// [TweenAnimationBuilder], its properties should not be accessed or changed
   /// anymore to avoid interference with the [TweenAnimationBuilder].
   const TweenAnimationBuilder({
-    Key? key,
+    super.key,
     required this.tween,
-    required Duration duration,
-    Curve curve = Curves.linear,
+    required super.duration,
+    super.curve,
     required this.builder,
-    VoidCallback? onEnd,
+    super.onEnd,
     this.child,
-  }) : assert(tween != null),
-       assert(curve != null),
-       assert(builder != null),
-       super(key: key, duration: duration, curve: curve, onEnd: onEnd);
+  });
 
   /// Defines the target value for the animation.
   ///

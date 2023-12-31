@@ -2,32 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flutter code sample for FocusNode
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-void main() => runApp(const MyApp());
+/// Flutter code sample for [FocusNode].
 
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+void main() => runApp(const FocusNodeExampleApp());
 
-  static const String _title = 'Flutter Code Sample';
+class FocusNodeExampleApp extends StatelessWidget {
+  const FocusNodeExampleApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: _title,
       home: Scaffold(
-        appBar: AppBar(title: const Text(_title)),
-        body: const MyStatelessWidget(),
+        appBar: AppBar(title: const Text('FocusNode Sample')),
+        body: const FocusNodeExample(),
       ),
     );
   }
 }
 
 class ColorfulButton extends StatefulWidget {
-  const ColorfulButton({Key? key}) : super(key: key);
+  const ColorfulButton({super.key});
 
   @override
   State<ColorfulButton> createState() => _ColorfulButtonState();
@@ -44,7 +41,7 @@ class _ColorfulButtonState extends State<ColorfulButton> {
     super.initState();
     _node = FocusNode(debugLabel: 'Button');
     _node.addListener(_handleFocusChange);
-    _nodeAttachment = _node.attach(context, onKey: _handleKeyPress);
+    _nodeAttachment = _node.attach(context, onKeyEvent: _handleKeyPress);
   }
 
   void _handleFocusChange() {
@@ -55,8 +52,8 @@ class _ColorfulButtonState extends State<ColorfulButton> {
     }
   }
 
-  KeyEventResult _handleKeyPress(FocusNode node, RawKeyEvent event) {
-    if (event is RawKeyDownEvent) {
+  KeyEventResult _handleKeyPress(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
       debugPrint('Focus node ${node.debugLabel} got key event: ${event.logicalKey}');
       if (event.logicalKey == LogicalKeyboardKey.keyR) {
         debugPrint('Changing color to red.');
@@ -106,22 +103,21 @@ class _ColorfulButtonState extends State<ColorfulButton> {
           height: 100,
           color: _focused ? _color : Colors.white,
           alignment: Alignment.center,
-          child:
-              Text(_focused ? "I'm in color! Press R,G,B!" : 'Press to focus'),
+          child: Text(_focused ? "I'm in color! Press R,G,B!" : 'Press to focus'),
         ),
       ),
     );
   }
 }
 
-class MyStatelessWidget extends StatelessWidget {
-  const MyStatelessWidget({Key? key}) : super(key: key);
+class FocusNodeExample extends StatelessWidget {
+  const FocusNodeExample({super.key});
 
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return DefaultTextStyle(
-      style: textTheme.headline4!,
+      style: textTheme.headlineMedium!,
       child: const ColorfulButton(),
     );
   }

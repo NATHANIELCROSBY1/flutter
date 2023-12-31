@@ -21,14 +21,14 @@ import 'updater.dart';
 
 class GalleryApp extends StatefulWidget {
   const GalleryApp({
-    Key? key,
+    super.key,
     this.updateUrlFetcher,
     this.enablePerformanceOverlay = true,
     this.enableRasterCacheImagesCheckerboard = true,
     this.enableOffscreenLayersCheckerboard = true,
     this.onSendFeedback,
     this.testMode = false,
-  }) : super(key: key);
+  });
 
   final UpdateUrlFetcher? updateUrlFetcher;
   final bool enablePerformanceOverlay;
@@ -104,10 +104,10 @@ class _GalleryAppState extends State<GalleryApp> {
   Widget _applyTextScaleFactor(Widget child) {
     return Builder(
       builder: (BuildContext context) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaleFactor: _options!.textScaleFactor!.scale,
-          ),
+        final double? textScaleFactor = _options!.textScaleFactor!.scale;
+        return MediaQuery.withClampedTextScaling(
+          minScaleFactor: textScaleFactor ?? 0.0,
+          maxScaleFactor: textScaleFactor ?? double.infinity,
           child: child,
         );
       },
@@ -122,7 +122,7 @@ class _GalleryAppState extends State<GalleryApp> {
         options: _options,
         onOptionsChanged: _handleOptionsChanged,
         onSendFeedback: widget.onSendFeedback ?? () {
-          launch('https://github.com/flutter/flutter/issues/new/choose', forceSafariVC: false);
+          launchUrl(Uri.parse('https://github.com/flutter/flutter/issues/new/choose'), mode: LaunchMode.externalApplication);
         },
       ),
     );

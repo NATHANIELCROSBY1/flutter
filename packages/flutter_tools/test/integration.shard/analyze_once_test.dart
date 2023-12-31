@@ -27,16 +27,13 @@ void main() {
       '--no-color',
       ...arguments,
     ], workingDirectory: projectPath);
-    printOnFailure('Output of flutter ${arguments.join(" ")}');
-    printOnFailure(result.stdout.toString());
-    printOnFailure(result.stderr.toString());
-    expect(result.exitCode, exitCode, reason: 'Expected to exit with non-zero exit code.');
+    expect(result, ProcessResultMatcher(exitCode: exitCode));
     assertContains(result.stdout.toString(), statusTextContains);
     assertContains(result.stdout.toString(), errorTextContains);
     expect(result.stderr, contains(exitMessageContains));
   }
 
-  void _createDotPackages(String projectPath, [bool nullSafe = false]) {
+  void createDotPackages(String projectPath, [bool nullSafe = false]) {
     final StringBuffer flutterRootUri = StringBuffer('file://');
     final String canonicalizedFlutterRootPath = fileSystem.path.canonicalize(getFlutterRoot());
     if (platform.isWindows) {
@@ -84,7 +81,7 @@ void main() {
     fileSystem.file(fileSystem.path.join(projectPath, 'pubspec.yaml'))
         ..createSync(recursive: true)
         ..writeAsStringSync(pubspecYamlSrc);
-    _createDotPackages(projectPath);
+    createDotPackages(projectPath);
     libMain = fileSystem.file(fileSystem.path.join(projectPath, 'lib', 'main.dart'))
         ..createSync(recursive: true)
         ..writeAsStringSync(mainDartSrc);
@@ -119,7 +116,7 @@ void main() {
           'Analyzing error.dart',
           "error $analyzerSeparator Target of URI doesn't exist",
           "error $analyzerSeparator Expected to find ';'",
-          'error $analyzerSeparator Unterminated string literal'
+          'error $analyzerSeparator Unterminated string literal',
         ],
         exitMessageContains: '3 issues found',
         exitCode: 1
@@ -133,7 +130,7 @@ void main() {
           'Analyzing 2 items',
           "error $analyzerSeparator Target of URI doesn't exist",
           "error $analyzerSeparator Expected to find ';'",
-          'error $analyzerSeparator Unterminated string literal'
+          'error $analyzerSeparator Unterminated string literal',
         ],
         exitMessageContains: '3 issues found',
         exitCode: 1
@@ -160,23 +157,17 @@ void main() {
   testWithoutContext('file not found', () async {
     await runCommand(
         arguments: <String>['analyze', '--no-pub', 'not_found.abc'],
-        exitMessageContains: "not_found.abc' does not exist",
+        exitMessageContains: "not_found.abc', however it does not exist on disk",
         exitCode: 1
     );
   });
 
   // Analyze in the current directory - no arguments
   testWithoutContext('working directory with errors', () async {
-    // Break the code to produce the "Avoid empty else" hint
-    // that is upgraded to a warning in package:flutter/analysis_options_user.yaml
-    // to assert that we are using the default Flutter analysis options.
+    // Break the code to produce an error and a warning.
     // Also insert a statement that should not trigger a lint here
     // but will trigger a lint later on when an analysis_options.yaml is added.
     String source = await libMain.readAsString();
-    source = source.replaceFirst(
-      'return MaterialApp(',
-      'if (debugPrintRebuildDirtyWidgets) {} else ; return MaterialApp(',
-    );
     source = source.replaceFirst(
       'onPressed: _incrementCounter,',
       '// onPressed: _incrementCounter,',
@@ -192,12 +183,10 @@ void main() {
       arguments: <String>['analyze', '--no-pub'],
       statusTextContains: <String>[
         'Analyzing',
-        'info $analyzerSeparator Avoid empty else statements',
-        'info $analyzerSeparator Avoid empty statements',
-        "info $analyzerSeparator The declaration '_incrementCounter' isn't",
-        "warning $analyzerSeparator The parameter 'onPressed' is required",
+        'unused_element',
+        'missing_required_param',
       ],
-      exitMessageContains: '4 issues found.',
+      exitMessageContains: '2 issues found.',
       exitCode: 1,
     );
   });
@@ -208,7 +197,6 @@ void main() {
     // which will trigger a lint for broken code that was inserted earlier
     final File optionsFile = fileSystem.file(fileSystem.path.join(projectPath, 'analysis_options.yaml'));
       optionsFile.writeAsStringSync('''
-  include: package:flutter/analysis_options_user.yaml
   linter:
     rules:
       - only_throw_errors
@@ -229,9 +217,9 @@ void main() {
       arguments: <String>['analyze', '--no-pub'],
       statusTextContains: <String>[
         'Analyzing',
-        "info $analyzerSeparator The declaration '_incrementCounter' isn't",
-        'info $analyzerSeparator Only throw instances of classes extending either Exception or Error',
-        "warning $analyzerSeparator The parameter 'onPressed' is required",
+        'unused_element',
+        'only_throw_errors',
+        'missing_required_param',
       ],
       exitMessageContains: '3 issues found.',
       exitCode: 1,
@@ -295,6 +283,13 @@ StringBuffer bar = StringBuffer('baz');
 int analyze() {}
 ''';
 
+    final File optionsFile = fileSystem.file(fileSystem.path.join(projectPath, 'analysis_options.yaml'));
+    optionsFile.writeAsStringSync('''
+analyzer:
+  errors:
+    missing_return: info
+  ''');
+
     fileSystem.directory(projectPath).childFile('main.dart').writeAsStringSync(infoSourceCode);
     await runCommand(
       arguments: <String>['analyze', '--no-pub'],
@@ -312,6 +307,13 @@ int analyze() {}
 int analyze() {}
 ''';
 
+    final File optionsFile = fileSystem.file(fileSystem.path.join(projectPath, 'analysis_options.yaml'));
+    optionsFile.writeAsStringSync('''
+analyzer:
+  errors:
+    missing_return: info
+  ''');
+
     fileSystem.directory(projectPath).childFile('main.dart').writeAsStringSync(infoSourceCode);
     await runCommand(
       arguments: <String>['analyze', '--no-pub', '--no-fatal-infos'],
@@ -328,6 +330,13 @@ int analyze() {}
 int analyze() {}
 ''';
 
+    final File optionsFile = fileSystem.file(fileSystem.path.join(projectPath, 'analysis_options.yaml'));
+    optionsFile.writeAsStringSync('''
+analyzer:
+  errors:
+    missing_return: info
+  ''');
+
     fileSystem.directory(projectPath).childFile('main.dart').writeAsStringSync(infoSourceCode);
     await runCommand(
       arguments: <String>['analyze', '--no-pub', '--fatal-warnings', '--no-fatal-infos'],
@@ -339,7 +348,7 @@ int analyze() {}
     );
   });
 
-  testWithoutContext('analyze once only fatal-infos has warning issue finally exit code 1.', () async {
+  testWithoutContext('analyze once only fatal-infos has warning issue finally exit code 0.', () async {
     const String warningSourceCode = '''
 int analyze() {}
 ''';
@@ -359,16 +368,38 @@ analyzer:
         'missing_return',
       ],
       exitMessageContains: '1 issue found.',
+    );
+  });
+
+
+  testWithoutContext('analyze once only fatal-warnings has warning issue finally exit code 1.', () async {
+    const String warningSourceCode = '''
+int analyze() {}
+''';
+
+    final File optionsFile = fileSystem.file(fileSystem.path.join(projectPath, 'analysis_options.yaml'));
+    optionsFile.writeAsStringSync('''
+analyzer:
+  errors:
+    missing_return: warning
+  ''');
+
+    fileSystem.directory(projectPath).childFile('main.dart').writeAsStringSync(warningSourceCode);
+    await runCommand(
+      arguments: <String>['analyze','--no-pub', '--no-fatal-infos', '--fatal-warnings'],
+      statusTextContains: <String>[
+        'warning',
+        'missing_return',
+      ],
+      exitMessageContains: '1 issue found.',
       exitCode: 1,
     );
   });
 }
 
 void assertContains(String text, List<String> patterns) {
-  if (patterns != null) {
-    for (final String pattern in patterns) {
-      expect(text, contains(pattern));
-    }
+  for (final String pattern in patterns) {
+    expect(text, contains(pattern));
   }
 }
 
@@ -423,7 +454,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             Text(
               '$_counter',
-              style: Theme.of(context).textTheme.headline4,
+              style: Theme.of(context).textTheme.headlineMedium,
             ),
           ],
         ),
@@ -441,7 +472,7 @@ class _MyHomePageState extends State<MyHomePage> {
 const String pubspecYamlSrc = r'''
 name: flutter_project
 environment:
-  sdk: ">=2.1.0 <3.0.0"
+  sdk: '>=3.2.0-0 <4.0.0'
 
 dependencies:
   flutter:

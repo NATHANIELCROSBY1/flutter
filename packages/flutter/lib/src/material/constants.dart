@@ -47,3 +47,15 @@ const EdgeInsets kTabLabelPadding = EdgeInsets.symmetric(horizontal: 16.0);
 
 /// The padding added around material list items.
 const EdgeInsets kMaterialListPadding = EdgeInsets.symmetric(vertical: 8.0);
+
+/// The default color for [ThemeData.iconTheme] when [ThemeData.brightness] is
+/// [Brightness.dark]. This color is used in [IconButton] to detect whether
+/// [IconTheme.of(context).color] is the same as the default color of [ThemeData.iconTheme].
+// ignore: prefer_const_constructors
+final Color kDefaultIconLightColor = Color(0xFFFFFFFF);
+
+/// The default color for [ThemeData.iconTheme] when [ThemeData.brightness] is
+/// [Brightness.light]. This color is used in [IconButton] to detect whether
+/// [IconTheme.of(context).color] is the same as the default color of [ThemeData.iconTheme].
+// ignore: prefer_const_constructors
+final Color kDefaultIconDarkColor = Color(0xDD000000);

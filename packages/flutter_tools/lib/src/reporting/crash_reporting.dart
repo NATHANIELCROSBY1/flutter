@@ -59,20 +59,17 @@ class CrashReporter {
     required FileSystem fileSystem,
     required Logger logger,
     required FlutterProjectFactory flutterProjectFactory,
-    required HttpClient client,
   }) : _fileSystem = fileSystem,
        _logger = logger,
-       _flutterProjectFactory = flutterProjectFactory,
-       _client = client;
+       _flutterProjectFactory = flutterProjectFactory;
 
   final FileSystem _fileSystem;
   final Logger _logger;
   final FlutterProjectFactory _flutterProjectFactory;
-  final HttpClient _client;
 
   /// Prints instructions for filing a bug about the crash.
   Future<void> informUser(CrashDetails details, File crashFile) async {
-    _logger.printError('A crash report has been written to ${crashFile.path}.');
+    _logger.printError('A crash report has been written to ${crashFile.path}');
     _logger.printStatus('This crash may already be reported. Check GitHub for similar crashes.', emphasis: true);
 
     final String similarIssuesURL = GitHubTemplateCreator.toolCrashSimilarIssuesURL(details.error.toString());
@@ -86,7 +83,6 @@ class CrashReporter {
       fileSystem: _fileSystem,
       logger: _logger,
       flutterProjectFactory: _flutterProjectFactory,
-      client: _client,
     );
 
     final String gitHubTemplateURL = await gitHubTemplateCreator.toolCrashIssueTemplateGitHubURL(

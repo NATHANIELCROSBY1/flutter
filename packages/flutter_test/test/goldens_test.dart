@@ -5,32 +5,36 @@
 import 'dart:async';
 import 'dart:io' as io;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:file/memory.dart';
-import 'package:flutter/foundation.dart' show DiagnosticLevel, DiagnosticsNode, DiagnosticPropertiesBuilder, FlutterError;
+import 'package:flutter/foundation.dart' show DiagnosticLevel, DiagnosticPropertiesBuilder, DiagnosticsNode, FlutterError;
 import 'package:flutter_test/flutter_test.dart' hide test;
 import 'package:flutter_test/flutter_test.dart' as test_package;
 
 // 1x1 transparent pixel
-const List<int> _kExpectedPngBytes =
-  <int>[137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
-    1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84,
-    120, 1, 99, 97, 0, 2, 0, 0, 25, 0, 5, 144, 240, 54, 245, 0, 0, 0, 0, 73, 69,
-    78, 68, 174, 66, 96, 130];
+const List<int> _kExpectedPngBytes = <int>[
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+  1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84,
+  120, 1, 99, 97, 0, 2, 0, 0, 25, 0, 5, 144, 240, 54, 245, 0, 0, 0, 0, 73, 69,
+  78, 68, 174, 66, 96, 130,
+];
 
 // 1x1 colored pixel
-const List<int> _kColorFailurePngBytes =
-  <int>[137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
-    1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84,
-    120, 1, 99, 249, 207, 240, 255, 63, 0, 7, 18, 3, 2, 164, 147, 160, 197, 0,
-    0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130];
+const List<int> _kColorFailurePngBytes = <int>[
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+  1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84,
+  120, 1, 99, 249, 207, 240, 255, 63, 0, 7, 18, 3, 2, 164, 147, 160, 197, 0,
+  0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+];
 
 // 1x2 transparent pixel
-const List<int> _kSizeFailurePngBytes =
-  <int>[137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
-    1, 0, 0,0, 2, 8, 6, 0, 0, 0, 153, 129, 182, 39, 0, 0, 0, 14, 73, 68, 65, 84,
-    120, 1, 99, 97, 0, 2, 22, 16, 1, 0, 0, 70, 0, 9, 112, 117, 150, 160, 0, 0,
-    0, 0, 73, 69, 78, 68, 174, 66, 96, 130];
+const List<int> _kSizeFailurePngBytes = <int>[
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+  1, 0, 0,0, 2, 8, 6, 0, 0, 0, 153, 129, 182, 39, 0, 0, 0, 14, 73, 68, 65, 84,
+  120, 1, 99, 97, 0, 2, 22, 16, 1, 0, 0, 70, 0, 9, 112, 117, 150, 160, 0, 0,
+  0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+];
 
 void main() {
   late MemoryFileSystem fs;
@@ -316,6 +320,36 @@ void main() {
         final Uri key = Uri.parse('foo.png');
         final Uri keyNull = comparator.getTestUri(key, null);
         expect(keyNull, Uri.parse('foo.png'));
+      });
+    });
+  });
+
+  group('ComparisonResult', () {
+    group('dispose', () {
+      test('disposes diffs images', () async {
+        final ui.Image image1 = await createTestImage(width: 10, height: 10, cache: false);
+        final ui.Image image2 = await createTestImage(width: 15, height: 5, cache: false);
+        final ui.Image image3 = await createTestImage(width: 5, height: 10, cache: false);
+
+        final ComparisonResult result = ComparisonResult(
+          passed: false,
+          diffPercent: 1.0,
+          diffs: <String, ui.Image>{
+            'image1': image1,
+            'image2': image2,
+            'image3': image3,
+          }
+        );
+
+        expect(image1.debugDisposed, isFalse);
+        expect(image2.debugDisposed, isFalse);
+        expect(image3.debugDisposed, isFalse);
+
+        result.dispose();
+
+        expect(image1.debugDisposed, isTrue);
+        expect(image2.debugDisposed, isTrue);
+        expect(image3.debugDisposed, isTrue);
       });
     });
   });

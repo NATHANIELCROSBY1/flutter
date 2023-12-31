@@ -19,6 +19,12 @@ Future<void> main() async {
       section('Lint integration_test');
 
       await inDirectory(tempDir, () async {
+        // Update pod repo.
+        await exec(
+          'pod',
+          <String>['repo', 'update'],
+        );
+
         // Relative to this script.
         final String flutterRoot = path.dirname(path.dirname(path.dirname(path.dirname(path.dirname(path.fromUri(Platform.script))))));
         print('Flutter root at $flutterRoot');
@@ -31,28 +37,17 @@ Future<void> main() async {
             'lib',
             'lint',
             iosintegrationTestPodspec,
-            '--configuration=Debug', // Release targets unsupported arm64 simulators. Use Debug to only build against targeted x86_64 simulator devices.
             '--use-libraries',
             '--verbose',
           ],
-          environment: <String, String>{
-            'LANG': 'en_US.UTF-8',
-          },
         );
 
         final String macosintegrationTestPodspec = path.join(integrationTestPackage, 'integration_test_macos', 'macos', 'integration_test_macos.podspec');
-        await exec(
-          'pod',
+        await _tryMacOSLint(
+          macosintegrationTestPodspec,
           <String>[
-            'lib',
-            'lint',
-            macosintegrationTestPodspec,
-            '--configuration=Debug', // Release targets unsupported arm64 Apple Silicon. Use Debug to only build against targeted x86_64 macOS.
             '--verbose',
           ],
-          environment: <String, String>{
-            'LANG': 'en_US.UTF-8',
-          },
         );
       });
 
@@ -84,13 +79,9 @@ Future<void> main() async {
             'lib',
             'lint',
             objcPodspecPath,
-            '--configuration=Debug', // Release targets unsupported arm64 simulators. Use Debug to only build against targeted x86_64 simulator devices.
             '--allow-warnings',
             '--verbose',
           ],
-          environment: <String, String>{
-            'LANG': 'en_US.UTF-8',
-          },
         );
       });
 
@@ -103,14 +94,10 @@ Future<void> main() async {
             'lib',
             'lint',
             objcPodspecPath,
-            '--configuration=Debug', // Release targets unsupported arm64 simulators. Use Debug to only build against targeted x86_64 simulator devices.
             '--allow-warnings',
             '--use-libraries',
             '--verbose',
           ],
-          environment: <String, String>{
-            'LANG': 'en_US.UTF-8',
-          },
         );
       });
 
@@ -141,14 +128,10 @@ Future<void> main() async {
           <String>[
             'lib',
             'lint',
-            '--configuration=Debug', // Release targets unsupported arm64 simulators. Use Debug to only build against targeted x86_64 simulator devices.
             swiftPodspecPath,
             '--allow-warnings',
             '--verbose',
           ],
-          environment: <String, String>{
-            'LANG': 'en_US.UTF-8',
-          },
         );
       });
 
@@ -161,14 +144,10 @@ Future<void> main() async {
             'lib',
             'lint',
             swiftPodspecPath,
-            '--configuration=Debug', // Release targets unsupported arm64 simulators. Use Debug to only build against targeted x86_64 simulator devices.
             '--allow-warnings',
             '--use-libraries',
             '--verbose',
           ],
-          environment: <String, String>{
-            'LANG': 'en_US.UTF-8',
-          },
         );
       });
 
@@ -176,41 +155,25 @@ Future<void> main() async {
 
       final String macOSPodspecPath = path.join(swiftPluginPath, 'macos', '$swiftPluginName.podspec');
       await inDirectory(tempDir, () async {
-        await exec(
-          'pod',
+        await _tryMacOSLint(
+          macOSPodspecPath,
           <String>[
-            'lib',
-            'lint',
-            macOSPodspecPath,
             '--allow-warnings',
             '--verbose',
           ],
-          environment: <String, String>{
-            'LANG': 'en_US.UTF-8',
-          },
-          // TODO(jmagman): Flutter cannot build against ARM https://github.com/flutter/flutter/issues/69221
-          canFail: true,
         );
       });
 
       section('Lint Swift macOS podspec plugin as library');
 
       await inDirectory(tempDir, () async {
-        await exec(
-          'pod',
+        await _tryMacOSLint(
+          macOSPodspecPath,
           <String>[
-            'lib',
-            'lint',
-            macOSPodspecPath,
             '--allow-warnings',
             '--use-libraries',
             '--verbose',
           ],
-          environment: <String, String>{
-            'LANG': 'en_US.UTF-8',
-          },
-          // TODO(jmagman): Flutter cannot build against ARM https://github.com/flutter/flutter/issues/69221
-          canFail: true,
         );
       });
 
@@ -239,7 +202,7 @@ Future<void> main() async {
       // Add the new plugins we just made.
       pubspecContent = pubspecContent.replaceFirst(
         '\ndependencies:\n',
-        '\ndependencies:\n  $objcPluginName:\n    path: $objcPluginPath\n  $swiftPluginName:\n    path: $swiftPluginPath\n  url_launcher:\n  url_launcher_macos:\n',
+        '\ndependencies:\n  $objcPluginName:\n    path: $objcPluginPath\n  $swiftPluginName:\n    path: $swiftPluginPath\n  url_launcher: 6.0.16\n  url_launcher_macos:\n',
       );
       objcPubspec.writeAsStringSync(pubspecContent, flush: true);
 
@@ -248,7 +211,7 @@ Future<void> main() async {
           'build',
           options: <String>[
             'ios',
-            '--no-codesign'
+            '--no-codesign',
           ],
           // TODO(jmagman): Make Objective-C applications handle Swift libraries https://github.com/flutter/flutter/issues/16049
           canFail: true
@@ -272,7 +235,7 @@ Future<void> main() async {
           'build',
           options: <String>[
             'ios',
-            '--no-codesign'
+            '--no-codesign',
           ],
         );
       });
@@ -305,7 +268,7 @@ Future<void> main() async {
           'build',
           options: <String>[
             'ios',
-            '--no-codesign'
+            '--no-codesign',
           ],
         );
       });
@@ -326,7 +289,7 @@ Future<void> main() async {
           'build',
           options: <String>[
             'ios',
-            '--no-codesign'
+            '--no-codesign',
           ],
         );
       });
@@ -390,7 +353,7 @@ Future<void> main() async {
           'build',
           options: <String>[
             'ios',
-            '--no-codesign'
+            '--no-codesign',
           ],
         );
       });
@@ -554,4 +517,19 @@ void _validateMacOSPodfile(String appPath) {
     'test_plugin_swift',
     'macos',
   ));
+}
+
+Future<void> _tryMacOSLint(
+  String podspecPath,
+  List<String> extraArguments,
+) async {
+  await eval(
+    'pod',
+    <String>[
+      'lib',
+      'lint',
+      podspecPath,
+      ...extraArguments,
+    ],
+  );
 }

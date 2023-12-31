@@ -6,9 +6,9 @@ import 'package:flutter/foundation.dart' show DiagnosticLevel, FlutterError;
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../rendering/mock_canvas.dart';
-
 class SillyBorder extends BoxBorder {
+  const SillyBorder();
+
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
 }
@@ -53,7 +53,7 @@ void main() {
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithMagentaTop5, -1.0), const Border(top: BorderSide(color: Color(0xFFFFFF00), width: 5.0)));
     expect(BoxBorder.lerp(visualWithSides10, directionalWithSides10, -1.0), visualWithSides30);
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithSides10, -1.0), directionalWithYellowTop10);
-    expect(() => BoxBorder.lerp(SillyBorder(), const Border(), -1.0), throwsFlutterError);
+    expect(() => BoxBorder.lerp(const SillyBorder(), const Border(), -1.0), throwsFlutterError);
 
     expect(BoxBorder.lerp(null, null, 0.0), null);
     expect(BoxBorder.lerp(Border.all(width: 10.0), null, 0.0), Border.all(width: 10.0));
@@ -65,7 +65,7 @@ void main() {
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithMagentaTop5, 0.0), const Border(top: BorderSide(color: Color(0xFFFFFF00), width: 5.0)));
     expect(BoxBorder.lerp(visualWithSides10, directionalWithSides10, 0.0), visualWithSides10);
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithSides10, 0.0), directionalWithYellowTop5);
-    expect(() => BoxBorder.lerp(SillyBorder(), const Border(), 0.0), throwsFlutterError);
+    expect(() => BoxBorder.lerp(const SillyBorder(), const Border(), 0.0), throwsFlutterError);
 
     expect(BoxBorder.lerp(null, null, 0.25), null);
     expect(BoxBorder.lerp(Border.all(width: 10.0), null, 0.25), Border.all(width: 7.5));
@@ -77,7 +77,7 @@ void main() {
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithMagentaTop5, 0.25), Border(top: BorderSide(width: 5.0, color: Color.lerp(const Color(0xFFFFFF00), const Color(0xFFFF00FF), 0.25)!)));
     expect(BoxBorder.lerp(visualWithSides10, directionalWithSides10, 0.25), visualWithSides10At50);
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithSides10, 0.25), visualWithYellowTop5At75 + directionalWithSides10At25);
-    expect(() => BoxBorder.lerp(SillyBorder(), const Border(), 0.25), throwsFlutterError);
+    expect(() => BoxBorder.lerp(const SillyBorder(), const Border(), 0.25), throwsFlutterError);
 
     expect(BoxBorder.lerp(null, null, 0.75), null);
     expect(BoxBorder.lerp(Border.all(width: 10.0), null, 0.75), Border.all(width: 2.5));
@@ -89,7 +89,7 @@ void main() {
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithMagentaTop5, 0.75), Border(top: BorderSide(width: 5.0, color: Color.lerp(const Color(0xFFFFFF00), const Color(0xFFFF00FF), 0.75)!)));
     expect(BoxBorder.lerp(visualWithSides10, directionalWithSides10, 0.75), directionalWithSides10At50);
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithSides10, 0.75), visualWithYellowTop5At25 + directionalWithSides10At75);
-    expect(() => BoxBorder.lerp(SillyBorder(), const Border(), 0.75), throwsFlutterError);
+    expect(() => BoxBorder.lerp(const SillyBorder(), const Border(), 0.75), throwsFlutterError);
 
     expect(BoxBorder.lerp(null, null, 1.0), null);
     expect(BoxBorder.lerp(Border.all(width: 10.0), null, 1.0), Border.all(width: 0.0, style: BorderStyle.none));
@@ -101,7 +101,7 @@ void main() {
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithMagentaTop5, 1.0), visualWithMagentaTop5);
     expect(BoxBorder.lerp(visualWithSides10, directionalWithSides10, 1.0), directionalWithSides10);
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithSides10, 1.0), directionalWithSides10);
-    expect(() => BoxBorder.lerp(SillyBorder(), const Border(), 1.0), throwsFlutterError);
+    expect(() => BoxBorder.lerp(const SillyBorder(), const Border(), 1.0), throwsFlutterError);
 
     expect(BoxBorder.lerp(null, null, 2.0), null);
     expect(BoxBorder.lerp(Border.all(width: 10.0), null, 2.0), Border.all(width: 0.0, style: BorderStyle.none));
@@ -113,13 +113,13 @@ void main() {
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithMagentaTop5, 2.0), visualWithMagentaTop5);
     expect(BoxBorder.lerp(visualWithSides10, directionalWithSides10, 2.0), directionalWithSides30);
     expect(BoxBorder.lerp(visualWithYellowTop5, directionalWithSides10, 2.0), directionalWithSides20);
-    expect(() => BoxBorder.lerp(SillyBorder(), const Border(), 2.0), throwsFlutterError);
+    expect(() => BoxBorder.lerp(const SillyBorder(), const Border(), 2.0), throwsFlutterError);
   });
 
   test('BoxBorder.lerp throws correct FlutterError message', () {
     late FlutterError error;
     try {
-      BoxBorder.lerp(SillyBorder(), const Border(), 2.0);
+      BoxBorder.lerp(const SillyBorder(), const Border(), 2.0);
     } on FlutterError catch (e) {
       error = e;
     }
@@ -140,8 +140,7 @@ void main() {
       '   BoxBorder.lerp() was called with two objects of type SillyBorder\n'
       '   and Border:\n'
       '     SillyBorder()\n'
-      '     Border.all(BorderSide(Color(0xff000000), 0.0,\n'
-      '   BorderStyle.none))\n'
+      '     Border.all(BorderSide(width: 0.0, style: none))\n'
       '   However, only Border and BorderDirectional classes are supported\n'
       '   by this method.\n'
       '   For a more general interpolation method, consider using\n'

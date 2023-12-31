@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../rendering/mock_canvas.dart';
-
 class User {
   const User({
     required this.email,
@@ -310,7 +308,7 @@ void main() {
   testWidgets('The height of options shrinks to height of resulting items, if less than maxHeight', (WidgetTester tester) async {
     // Returns a Future with the height of the default [Autocomplete] options widget
     // after the provided text had been entered into the [Autocomplete] field.
-    Future<double> _getDefaultOptionsHeight(
+    Future<double> getDefaultOptionsHeight(
         WidgetTester tester, String enteredText) async {
       final Finder listFinder = find.byType(ListView);
       final Finder inputFinder = find.byType(TextFormField);
@@ -341,17 +339,17 @@ void main() {
 
     // Entering `a` returns 9 items(height > `maxOptionsHeight`) from the kOptions
     // so height gets restricted to `maxOptionsHeight =250`.
-    final double nineItemsHeight = await _getDefaultOptionsHeight(tester, 'a');
+    final double nineItemsHeight = await getDefaultOptionsHeight(tester, 'a');
     expect(nineItemsHeight, equals(maxOptionsHeight));
 
     // Returns 2 Items (height < `maxOptionsHeight`)
     // so options height shrinks to 2 Items combined height.
-    final double twoItemsHeight = await _getDefaultOptionsHeight(tester, 'el');
+    final double twoItemsHeight = await getDefaultOptionsHeight(tester, 'el');
     expect(twoItemsHeight, lessThan(maxOptionsHeight));
 
     // Returns 1 item (height < `maxOptionsHeight`) from `kOptions`
     // so options height shrinks to 1 items height.
-    final double oneItemsHeight = await _getDefaultOptionsHeight(tester, 'elep');
+    final double oneItemsHeight = await getDefaultOptionsHeight(tester, 'elep');
     expect(oneItemsHeight, lessThan(twoItemsHeight));
   });
 
@@ -459,9 +457,7 @@ void main() {
     const Color highlightColor = Color(0xFF112233);
     await tester.pumpWidget(
       MaterialApp(
-        theme: ThemeData.light().copyWith(
-          focusColor: highlightColor,
-        ),
+        theme: ThemeData.light().copyWith(focusColor: highlightColor),
         home: Scaffold(
           body: Autocomplete<String>(
             optionsBuilder: (TextEditingValue textEditingValue) {
@@ -481,30 +477,91 @@ void main() {
     final ListView list = find.byType(ListView).evaluate().first.widget as ListView;
     expect(list.semanticChildCount, 6);
 
-    // Highlighted item should be at the top
-    expect(tester.getTopLeft(find.text('chameleon')).dy, equals(64.0));
-    checkOptionHighlight(tester, 'chameleon', highlightColor);
+    final Rect optionsGroupRect = tester.getRect(find.byType(ListView));
+    const double optionsGroupPadding = 16.0;
 
-    // Move down the list of options
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
+    // Highlighted item should be at the top.
+    checkOptionHighlight(tester, 'chameleon', highlightColor);
+    expect(
+      tester.getTopLeft(find.text('chameleon')).dy,
+      equals(optionsGroupRect.top + optionsGroupPadding),
+    );
+
+    // Move down the list of options.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); // Select 'elephant'.
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); // Select 'goose'.
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); // Select 'lemur'.
+    await tester.pumpAndSettle();
+
+    // Highlighted item 'lemur' should be centered in the options popup.
+    checkOptionHighlight(tester, 'lemur', highlightColor);
+    expect(
+      tester.getCenter(find.text('lemur')).dy,
+      equals(optionsGroupRect.center.dy),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); // Select 'mouse'.
+    await tester.pumpAndSettle();
+
+    checkOptionHighlight(tester, 'mouse', highlightColor);
 
     // First item should have scrolled off the top, and not be selected.
     expect(find.text('chameleon'), findsNothing);
-
-    // Highlighted item 'lemur' should be centered in the options popup
-    expect(tester.getTopLeft(find.text('mouse')).dy, equals(187.0));
-    checkOptionHighlight(tester, 'mouse', highlightColor);
 
     // The other items on screen should not be selected.
     checkOptionHighlight(tester, 'goose', null);
     checkOptionHighlight(tester, 'lemur', null);
     checkOptionHighlight(tester, 'northern white rhinoceros', null);
+  });
+
+  group('optionsViewOpenDirection', () {
+    testWidgets('default (down)', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Autocomplete<String>(
+              optionsBuilder: (TextEditingValue textEditingValue) => <String>['a'],
+            ),
+          ),
+        ),
+      );
+      final OptionsViewOpenDirection actual = tester.widget<RawAutocomplete<String>>(find.byType(RawAutocomplete<String>))
+        .optionsViewOpenDirection;
+      expect(actual, equals(OptionsViewOpenDirection.down));
+    });
+
+    testWidgets('down', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Autocomplete<String>(
+              optionsViewOpenDirection: OptionsViewOpenDirection.down, // ignore: avoid_redundant_argument_values
+              optionsBuilder: (TextEditingValue textEditingValue) => <String>['a'],
+            ),
+          ),
+        ),
+      );
+      final OptionsViewOpenDirection actual = tester.widget<RawAutocomplete<String>>(find.byType(RawAutocomplete<String>))
+        .optionsViewOpenDirection;
+      expect(actual, equals(OptionsViewOpenDirection.down));
+    });
+
+    testWidgets('up', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Autocomplete<String>(
+              optionsViewOpenDirection: OptionsViewOpenDirection.up,
+              optionsBuilder: (TextEditingValue textEditingValue) => <String>['a'],
+            ),
+          ),
+        ),
+      );
+      final OptionsViewOpenDirection actual = tester.widget<RawAutocomplete<String>>(find.byType(RawAutocomplete<String>))
+        .optionsViewOpenDirection;
+      expect(actual, equals(OptionsViewOpenDirection.up));
+    });
   });
 }

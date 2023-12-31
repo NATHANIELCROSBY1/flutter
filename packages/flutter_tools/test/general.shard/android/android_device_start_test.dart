@@ -56,8 +56,7 @@ void main() {
     TargetPlatform.android_x64,
   ]) {
     testWithoutContext('AndroidDevice.startApp allows release builds on $targetPlatform', () async {
-      final String arch = getNameForAndroidArch(
-        getAndroidArchForName(getNameForTargetPlatform(targetPlatform)));
+      final String arch = getAndroidArchForName(getNameForTargetPlatform(targetPlatform)).archName;
       final AndroidDevice device = AndroidDevice('1234', modelID: 'TestModel',
         fileSystem: fileSystem,
         processManager: processManager,
@@ -65,7 +64,7 @@ void main() {
         platform: FakePlatform(),
         androidSdk: androidSdk,
       );
-      final File apkFile = fileSystem.file('app.apk')..createSync();
+      final File apkFile = fileSystem.file('app-debug.apk')..createSync();
       final AndroidApk apk = AndroidApk(
         id: 'FlutterApp',
         applicationPackage: apkFile,
@@ -88,7 +87,7 @@ void main() {
         command: <String>['adb', '-s', '1234', 'shell', 'pm', 'list', 'packages', 'FlutterApp'],
       ));
       processManager.addCommand(const FakeCommand(
-        command: <String>['adb', '-s', '1234', 'install', '-t', '-r', 'app.apk'],
+        command: <String>['adb', '-s', '1234', 'install', '-t', '-r', 'app-debug.apk'],
       ));
       processManager.addCommand(kShaCommand);
       processManager.addCommand(const FakeCommand(
@@ -100,7 +99,9 @@ void main() {
           'am',
           'start',
           '-a',
-          'android.intent.action.RUN',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.LAUNCHER',
           '-f',
           '0x20000000',
           '--ez', 'enable-dart-profiling', 'true',
@@ -130,7 +131,7 @@ void main() {
       platform: FakePlatform(),
       androidSdk: androidSdk,
     );
-    final File apkFile = fileSystem.file('app.apk')..createSync();
+    final File apkFile = fileSystem.file('app-debug.apk')..createSync();
     final AndroidApk apk = AndroidApk(
       id: 'FlutterApp',
       applicationPackage: apkFile,
@@ -168,7 +169,7 @@ void main() {
       platform: FakePlatform(),
       androidSdk: androidSdk,
     );
-    final File apkFile = fileSystem.file('app.apk')..createSync();
+    final File apkFile = fileSystem.file('app-debug.apk')..createSync();
     final AndroidApk apk = AndroidApk(
       id: 'FlutterApp',
       applicationPackage: apkFile,
@@ -198,9 +199,9 @@ void main() {
         '-r',
         '--user',
         '10',
-        'app.apk'
+        'app-debug.apk',
       ],
-      stdout: '\n\nObservatory listening on http://127.0.0.1:456\n\n',
+      stdout: '\n\nThe Dart VM service is listening on http://127.0.0.1:456\n\n',
     ));
     processManager.addCommand(kShaCommand);
     processManager.addCommand(const FakeCommand(
@@ -226,7 +227,9 @@ void main() {
         'am',
         'start',
         '-a',
-        'android.intent.action.RUN',
+        'android.intent.action.MAIN',
+        '-c',
+        'android.intent.category.LAUNCHER',
         '-f',
         '0x20000000',
         // The DebuggingOptions arguments go here.
@@ -237,10 +240,12 @@ void main() {
         '--es', 'trace-allowlist', 'bar,baz',
         '--es', 'trace-skia-allowlist', 'skia.a,skia.b',
         '--ez', 'trace-systrace', 'true',
+        '--es', 'trace-to-file', 'path/to/trace.binpb',
         '--ez', 'endless-trace-buffer', 'true',
         '--ez', 'dump-skp-on-shader-compilation', 'true',
         '--ez', 'cache-sksl', 'true',
         '--ez', 'purge-persistent-cache', 'true',
+        '--ez', 'enable-impeller', 'true',
         '--ez', 'enable-checked-mode', 'true',
         '--ez', 'verify-entry-points', 'true',
         '--ez', 'start-paused', 'true',
@@ -267,19 +272,21 @@ void main() {
         traceAllowlist: 'bar,baz',
         traceSkiaAllowlist: 'skia.a,skia.b',
         traceSystrace: true,
+        traceToFile: 'path/to/trace.binpb',
         endlessTraceBuffer: true,
         dumpSkpOnShaderCompilation: true,
         cacheSkSL: true,
         purgePersistentCache: true,
         useTestFonts: true,
         verboseSystemLogs: true,
+        enableImpeller: ImpellerStatus.enabled,
         nullAssertions: true,
       ),
       platformArgs: <String, dynamic>{},
       userIdentifier: '10',
     );
 
-    // This fails to start due to observatory discovery issues.
+    // This fails to start due to VM Service discovery issues.
     expect(launchResult.started, false);
     expect(processManager, hasNoRemainingExpectations);
   });

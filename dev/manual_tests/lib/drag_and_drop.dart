@@ -7,7 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 class ExampleDragTarget extends StatefulWidget {
-  const ExampleDragTarget({Key? key}) : super(key: key);
+  const ExampleDragTarget({super.key});
 
   @override
   ExampleDragTargetState createState() => ExampleDragTargetState();
@@ -16,16 +16,16 @@ class ExampleDragTarget extends StatefulWidget {
 class ExampleDragTargetState extends State<ExampleDragTarget> {
   Color _color = Colors.grey;
 
-  void _handleAccept(Color data) {
+  void _handleAccept(DragTargetDetails<Color> details) {
     setState(() {
-      _color = data;
+      _color = details.data;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return DragTarget<Color>(
-      onAccept: _handleAccept,
+      onAcceptWithDetails: _handleAccept,
       builder: (BuildContext context, List<Color?> data, List<dynamic> rejectedData) {
         return Container(
           height: 100.0,
@@ -44,7 +44,7 @@ class ExampleDragTargetState extends State<ExampleDragTarget> {
 }
 
 class Dot extends StatefulWidget {
-  const Dot({ Key? key, this.color, this.size, this.child, this.tappable = false }) : super(key: key);
+  const Dot({ super.key, this.color, this.size, this.child, this.tappable = false });
 
   final Color? color;
   final double? size;
@@ -77,12 +77,12 @@ class DotState extends State<Dot> {
 
 class ExampleDragSource extends StatelessWidget {
   const ExampleDragSource({
-    Key? key,
+    super.key,
     this.color,
     this.heavy = false,
     this.under = true,
     this.child,
-  }) : super(key: key);
+  });
 
   final Color? color;
   final bool heavy;
@@ -96,11 +96,12 @@ class ExampleDragSource extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     double size = kDotSize;
-    if (heavy)
+    if (heavy) {
       size *= kHeavyMultiplier;
+    }
 
     final Widget contents = DefaultTextStyle(
-      style: Theme.of(context).textTheme.bodyText2!,
+      style: Theme.of(context).textTheme.bodyMedium!,
       textAlign: TextAlign.center,
       child: Dot(
         color: color,
@@ -166,8 +167,9 @@ class DashOutlineCirclePainter extends CustomPainter {
       ..strokeWidth = radius / 10.0;
     final Path path = Path();
     final Rect box = Offset.zero & size;
-    for (double theta = 0.0; theta < math.pi * 2.0; theta += deltaTheta)
+    for (double theta = 0.0; theta < math.pi * 2.0; theta += deltaTheta) {
       path.addArc(box, theta + startOffset, segmentArc);
+    }
     canvas.drawPath(path, paint);
   }
 
@@ -176,7 +178,7 @@ class DashOutlineCirclePainter extends CustomPainter {
 }
 
 class MovableBall extends StatelessWidget {
-  const MovableBall(this.position, this.ballPosition, this.callback, {Key? key}) : super(key: key);
+  const MovableBall(this.position, this.ballPosition, this.callback, {super.key});
 
   final int position;
   final int ballPosition;
@@ -188,7 +190,7 @@ class MovableBall extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget ball = DefaultTextStyle(
-      style: Theme.of(context).primaryTextTheme.bodyText2!,
+      style: Theme.of(context).primaryTextTheme.bodyMedium!,
       textAlign: TextAlign.center,
       child: Dot(
         key: kBallKey,
@@ -215,7 +217,7 @@ class MovableBall extends StatelessWidget {
       );
     } else {
       return DragTarget<bool>(
-        onAccept: (bool data) { callback(position); },
+        onAcceptWithDetails: (DragTargetDetails<bool> data) { callback(position); },
         builder: (BuildContext context, List<bool?> accepted, List<dynamic> rejected) {
           return dashedBall;
         },
@@ -225,7 +227,7 @@ class MovableBall extends StatelessWidget {
 }
 
 class DragAndDropApp extends StatefulWidget {
-  const DragAndDropApp({Key? key}) : super(key: key);
+  const DragAndDropApp({super.key});
 
   @override
   DragAndDropAppState createState() => DragAndDropAppState();
@@ -268,9 +270,9 @@ class DragAndDropAppState extends State<DragAndDropApp> {
               ],
             ),
           ),
-          Expanded(
+          const Expanded(
             child: Row(
-              children: const <Widget>[
+              children: <Widget>[
                 Expanded(child: ExampleDragTarget()),
                 Expanded(child: ExampleDragTarget()),
                 Expanded(child: ExampleDragTarget()),

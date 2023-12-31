@@ -18,7 +18,7 @@ const double _kDemoItemHeight = 64.0;
 const Duration _kFrontLayerSwitchDuration = Duration(milliseconds: 300);
 
 class _FlutterLogo extends StatelessWidget {
-  const _FlutterLogo({ Key? key }) : super(key: key);
+  const _FlutterLogo();
 
   @override
   Widget build(BuildContext context) {
@@ -41,10 +41,9 @@ class _FlutterLogo extends StatelessWidget {
 
 class _CategoryItem extends StatelessWidget {
   const _CategoryItem({
-    Key? key,
     this.category,
     this.onTap,
-  }) : super (key: key);
+  });
 
   final GalleryDemoCategory? category;
   final VoidCallback? onTap;
@@ -80,7 +79,7 @@ class _CategoryItem extends StatelessWidget {
               child: Text(
                 category!.name,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.subtitle1!.copyWith(
+                style: theme.textTheme.titleMedium!.copyWith(
                   fontFamily: 'GoogleSans',
                   color: isDark ? Colors.white : _kFlutterBlue,
                 ),
@@ -95,10 +94,9 @@ class _CategoryItem extends StatelessWidget {
 
 class _CategoriesPage extends StatelessWidget {
   const _CategoriesPage({
-    Key? key,
     this.categories,
     this.onCategoryTap,
-  }) : super(key: key);
+  });
 
   final Iterable<GalleryDemoCategory>? categories;
   final ValueChanged<GalleryDemoCategory>? onCategoryTap;
@@ -162,7 +160,7 @@ class _CategoriesPage extends StatelessWidget {
 }
 
 class _DemoItem extends StatelessWidget {
-  const _DemoItem({ Key? key, this.demo }) : super(key: key);
+  const _DemoItem({ this.demo });
 
   final GalleryDemo? demo;
 
@@ -180,7 +178,8 @@ class _DemoItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final bool isDark = theme.brightness == Brightness.dark;
-    final double textScaleFactor = MediaQuery.textScaleFactorOf(context);
+    // ignore: deprecated_member_use, https://github.com/flutter/flutter/issues/128825
+    final double textScaleFactor = MediaQuery.textScalerOf(context).textScaleFactor;
     return RawMaterialButton(
       splashColor: theme.primaryColor.withOpacity(0.12),
       highlightColor: Colors.transparent,
@@ -208,14 +207,14 @@ class _DemoItem extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     demo!.title,
-                    style: theme.textTheme.subtitle1!.copyWith(
+                    style: theme.textTheme.titleMedium!.copyWith(
                       color: isDark ? Colors.white : const Color(0xFF202124),
                     ),
                   ),
                   if (demo!.subtitle != null)
                     Text(
                       demo!.subtitle!,
-                      style: theme.textTheme.bodyText2!.copyWith(
+                      style: theme.textTheme.bodyMedium!.copyWith(
                         color: isDark ? Colors.white : const Color(0xFF60646B)
                       ),
                     ),
@@ -262,10 +261,10 @@ class _DemosPage extends StatelessWidget {
 
 class GalleryHome extends StatefulWidget {
   const GalleryHome({
-    Key? key,
+    super.key,
     this.testMode = false,
     this.optionsPage,
-  }) : super(key: key);
+  });
 
   final Widget? optionsPage;
   final bool testMode;
@@ -326,14 +325,14 @@ class _GalleryHomeState extends State<GalleryHome> with SingleTickerProviderStat
       backgroundColor: isDark ? _kFlutterBlue : theme.primaryColor,
       body: SafeArea(
         bottom: false,
-        child: WillPopScope(
-          onWillPop: () {
-            // Pop the category page if Android back button is pressed.
-            if (_category != null) {
-              setState(() => _category = null);
-              return Future<bool>.value(false);
+        child: PopScope(
+          canPop: _category == null,
+          onPopInvoked: (bool didPop) {
+            if (didPop) {
+              return;
             }
-            return Future<bool>.value(true);
+            // Pop the category page if Android back button is pressed.
+            setState(() => _category = null);
           },
           child: Backdrop(
             backTitle: const Text('Options'),

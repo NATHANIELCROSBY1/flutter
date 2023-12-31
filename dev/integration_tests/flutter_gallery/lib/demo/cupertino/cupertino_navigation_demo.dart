@@ -32,14 +32,13 @@ const List<String> coolColorNames = <String>[
 const int _kChildCount = 50;
 
 class CupertinoNavigationDemo extends StatelessWidget {
-  CupertinoNavigationDemo({ Key? key, this.randomSeed })
+  CupertinoNavigationDemo({ super.key, this.randomSeed })
       : colorItems = List<Color>.generate(_kChildCount, (int index) {
           return coolColors[math.Random(randomSeed).nextInt(coolColors.length)];
         }) ,
         colorNameItems = List<String>.generate(_kChildCount, (int index) {
           return coolColorNames[math.Random(randomSeed).nextInt(coolColorNames.length)];
-        }),
-        super(key: key);
+        });
 
   static const String routeName = '/cupertino/navigation';
 
@@ -49,9 +48,9 @@ class CupertinoNavigationDemo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
+    return PopScope(
       // Prevent swipe popping of this page. Use explicit exit buttons only.
-      onWillPop: () => Future<bool>.value(true),
+      canPop: false,
       child: DefaultTextStyle(
         style: CupertinoTheme.of(context).textTheme.textStyle,
         child: CupertinoTabScaffold(
@@ -105,7 +104,7 @@ class CupertinoNavigationDemo extends StatelessWidget {
 }
 
 class ExitButton extends StatelessWidget {
-  const ExitButton({Key? key}) : super(key: key);
+  const ExitButton({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -135,11 +134,11 @@ final Widget trailingButtons = Row(
 
 class CupertinoDemoTab1 extends StatelessWidget {
   const CupertinoDemoTab1({
-    Key? key,
+    super.key,
     this.colorItems,
     this.colorNameItems,
     this.randomSeed,
-  }) : super(key: key);
+  });
 
   final List<Color>? colorItems;
   final List<String>? colorNameItems;
@@ -186,13 +185,13 @@ class CupertinoDemoTab1 extends StatelessWidget {
 
 class Tab1RowItem extends StatelessWidget {
   const Tab1RowItem({
-    Key? key,
+    super.key,
     this.index,
     this.lastItem,
     this.color,
     this.colorName,
     this.randomSeed,
-  }) : super(key: key);
+  });
 
   final int? index;
   final bool? lastItem;
@@ -215,7 +214,7 @@ class Tab1RowItem extends StatelessWidget {
           ),
         ));
       },
-      child: Container(
+      child: ColoredBox(
         color: CupertinoDynamicColor.resolve(CupertinoColors.systemBackground, context),
         child: SafeArea(
           top: false,
@@ -290,7 +289,7 @@ class Tab1RowItem extends StatelessWidget {
 }
 
 class Tab1ItemPage extends StatefulWidget {
-  const Tab1ItemPage({Key? key, this.color, this.colorName, this.index, this.randomSeed}) : super(key: key);
+  const Tab1ItemPage({super.key, this.color, this.colorName, this.index, this.randomSeed});
 
   final Color? color;
   final String? colorName;
@@ -437,7 +436,7 @@ class Tab1ItemPageState extends State<Tab1ItemPage> {
 }
 
 class CupertinoDemoTab2 extends StatelessWidget {
-  const CupertinoDemoTab2({Key? key}) : super(key: key);
+  const CupertinoDemoTab2({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -447,6 +446,7 @@ class CupertinoDemoTab2 extends StatelessWidget {
       ),
       child: CupertinoScrollbar(
         child: ListView(
+          primary: true,
           children: <Widget>[
             const CupertinoUserInterfaceLevel(
               data: CupertinoUserInterfaceLevelData.elevated,
@@ -461,7 +461,7 @@ class CupertinoDemoTab2 extends StatelessWidget {
 }
 
 class Tab2Header extends StatelessWidget {
-  const Tab2Header({Key? key}) : super(key: key);
+  const Tab2Header({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -589,7 +589,7 @@ enum Tab2ConversationBubbleColor {
 }
 
 class Tab2ConversationBubble extends StatelessWidget {
-  const Tab2ConversationBubble({Key? key, this.text, this.color}) : super(key: key);
+  const Tab2ConversationBubble({super.key, this.text, this.color});
 
   final String? text;
   final Tab2ConversationBubbleColor? color;
@@ -603,11 +603,9 @@ class Tab2ConversationBubble extends StatelessWidget {
       case Tab2ConversationBubbleColor.gray:
         backgroundColor = CupertinoDynamicColor.resolve(CupertinoColors.systemFill, context);
         foregroundColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-        break;
       case Tab2ConversationBubbleColor.blue:
         backgroundColor = CupertinoTheme.of(context).primaryColor;
         foregroundColor = CupertinoColors.white;
-        break;
       case null:
         break;
     }
@@ -633,7 +631,7 @@ class Tab2ConversationBubble extends StatelessWidget {
 }
 
 class Tab2ConversationAvatar extends StatelessWidget {
-  const Tab2ConversationAvatar({Key? key, this.text, this.color}) : super(key: key);
+  const Tab2ConversationAvatar({super.key, this.text, this.color});
 
   final String? text;
   final Color? color;
@@ -672,7 +670,7 @@ class Tab2ConversationAvatar extends StatelessWidget {
 }
 
 class Tab2ConversationRow extends StatelessWidget {
-  const Tab2ConversationRow({Key? key, this.avatar, this.text}) : super(key: key);
+  const Tab2ConversationRow({super.key, this.avatar, this.text});
 
   final Tab2ConversationAvatar? avatar;
   final String? text;
@@ -742,7 +740,7 @@ List<Widget> buildTab2Conversation() {
 }
 
 class CupertinoDemoTab3 extends StatelessWidget {
-  const CupertinoDemoTab3({Key? key}) : super(key: key);
+  const CupertinoDemoTab3({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -794,7 +792,7 @@ class CupertinoDemoTab3 extends StatelessWidget {
 }
 
 class Tab3Dialog extends StatelessWidget {
-  const Tab3Dialog({Key? key}) : super(key: key);
+  const Tab3Dialog({super.key});
 
   @override
   Widget build(BuildContext context) {

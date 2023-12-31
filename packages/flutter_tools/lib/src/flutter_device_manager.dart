@@ -9,11 +9,9 @@ import 'android/android_sdk.dart';
 import 'android/android_workflow.dart';
 import 'artifacts.dart';
 import 'base/file_system.dart';
-import 'base/logger.dart';
 import 'base/os.dart';
 import 'base/platform.dart';
-import 'base/terminal.dart';
-import 'base/user_messages.dart' hide userMessages;
+import 'base/user_messages.dart';
 import 'custom_devices/custom_device.dart';
 import 'custom_devices/custom_devices_config.dart';
 import 'device.dart';
@@ -29,21 +27,22 @@ import 'macos/macos_device.dart';
 import 'macos/macos_ipad_device.dart';
 import 'macos/macos_workflow.dart';
 import 'macos/xcdevice.dart';
+import 'preview_device.dart';
 import 'tester/flutter_tester.dart';
 import 'version.dart';
 import 'web/web_device.dart';
-import 'windows/uwptool.dart';
+
 import 'windows/windows_device.dart';
 import 'windows/windows_workflow.dart';
 
 /// A provider for all of the device discovery instances.
 class FlutterDeviceManager extends DeviceManager {
   FlutterDeviceManager({
-    required Logger logger,
+    required super.logger,
     required Platform platform,
     required ProcessManager processManager,
     required FileSystem fileSystem,
-    required AndroidSdk androidSdk,
+    required AndroidSdk? androidSdk,
     required FeatureFlags featureFlags,
     required IOSSimulatorUtils iosSimulatorUtils,
     required XCDevice xcDevice,
@@ -57,9 +56,7 @@ class FlutterDeviceManager extends DeviceManager {
     required UserMessages userMessages,
     required OperatingSystemUtils operatingSystemUtils,
     required WindowsWorkflow windowsWorkflow,
-    required Terminal terminal,
     required CustomDevicesConfig customDevicesConfig,
-    required UwpTool uwptool,
   }) : deviceDiscoverers =  <DeviceDiscovery>[
     AndroidDevices(
       logger: logger,
@@ -91,7 +88,6 @@ class FlutterDeviceManager extends DeviceManager {
       processManager: processManager,
       logger: logger,
       artifacts: artifacts,
-      operatingSystemUtils: operatingSystemUtils,
     ),
     MacOSDevices(
       processManager: processManager,
@@ -109,6 +105,14 @@ class FlutterDeviceManager extends DeviceManager {
       fileSystem: fileSystem,
       operatingSystemUtils: operatingSystemUtils,
     ),
+    PreviewDeviceDiscovery(
+      platform: platform,
+      artifacts: artifacts,
+      fileSystem: fileSystem,
+      logger: logger,
+      processManager: processManager,
+      featureFlags: featureFlags,
+    ),
     LinuxDevices(
       platform: platform,
       featureFlags: featureFlags,
@@ -123,8 +127,6 @@ class FlutterDeviceManager extends DeviceManager {
       logger: logger,
       fileSystem: fileSystem,
       windowsWorkflow: windowsWorkflow,
-      featureFlags: featureFlags,
-      uwptool: uwptool,
     ),
     WebDevices(
       featureFlags: featureFlags,
@@ -139,11 +141,7 @@ class FlutterDeviceManager extends DeviceManager {
       logger: logger,
       config: customDevicesConfig
     ),
-  ], super(
-      logger: logger,
-      terminal: terminal,
-      userMessages: userMessages,
-    );
+  ];
 
   @override
   final List<DeviceDiscovery> deviceDiscoverers;

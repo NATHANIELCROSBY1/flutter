@@ -17,34 +17,16 @@ class MultidexProject extends Project {
     bool useSyntheticPackage = false,
   }) {
     this.dir = dir;
-    if (androidSettings != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'settings.gradle'), androidSettings);
-    }
-    if (androidBuild != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'build.gradle'), androidBuild);
-    }
-    if (androidLocalProperties != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'local.properties'), androidLocalProperties);
-    }
-    if (androidGradleProperties != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'gradle.properties'), androidGradleProperties);
-    }
-    if (appBuild != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'build.gradle'), appBuild);
-    }
-    if (appManifest != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), appManifest);
-    }
-    if (appStrings != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml'), appStrings);
-    }
-    if (appStyles != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'res', 'values', 'styles.xml'), appStyles);
-    }
-    if (appLaunchBackground != null) {
-      writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'res', 'drawable', 'launch_background.xml'), appLaunchBackground);
-    }
-    if (includeFlutterMultiDexApplication && appMultidexApplication != null) {
+    writeFile(fileSystem.path.join(dir.path, 'android', 'settings.gradle'), androidSettings);
+    writeFile(fileSystem.path.join(dir.path, 'android', 'build.gradle'), androidBuild);
+    writeFile(fileSystem.path.join(dir.path, 'android', 'local.properties'), androidLocalProperties);
+    writeFile(fileSystem.path.join(dir.path, 'android', 'gradle.properties'), androidGradleProperties);
+    writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'build.gradle'), appBuild);
+    writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), appManifest);
+    writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml'), appStrings);
+    writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'res', 'values', 'styles.xml'), appStyles);
+    writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'res', 'drawable', 'launch_background.xml'), appLaunchBackground);
+    if (includeFlutterMultiDexApplication) {
       writeFile(fileSystem.path.join(dir.path, 'android', 'app', 'src', 'main', 'java', fileSystem.path.join('io', 'flutter', 'app', 'FlutterMultiDexApplication.java')), appMultidexApplication);
     }
     return super.setUpIn(dir);
@@ -56,7 +38,7 @@ class MultidexProject extends Project {
   final String pubspec = '''
   name: test
   environment:
-    sdk: ">=2.12.0-0 <3.0.0"
+    sdk: '>=3.2.0-0 <4.0.0'
 
   dependencies:
     flutter:
@@ -77,9 +59,9 @@ class MultidexProject extends Project {
   class MyApp extends StatelessWidget {
     @override
     Widget build(BuildContext context) {
-      return new MaterialApp(
+      return MaterialApp(
         title: 'Flutter Demo',
-        home: new Container(),
+        home: Container(),
       );
     }
   }
@@ -101,14 +83,14 @@ class MultidexProject extends Project {
 
   String get androidBuild => r'''
   buildscript {
-      ext.kotlin_version = '1.3.50'
+      ext.kotlin_version = '1.7.10'
       repositories {
           google()
           mavenCentral()
       }
 
       dependencies {
-          classpath 'com.android.tools.build:gradle:4.1.0'
+          classpath 'com.android.tools.build:gradle:7.3.0'
           classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
       }
   }
@@ -128,7 +110,7 @@ class MultidexProject extends Project {
       project.evaluationDependsOn(':app')
   }
 
-  task clean(type: Delete) {
+  tasks.register("clean", Delete) {
       delete rootProject.buildDir
   }
   ''';
@@ -162,7 +144,7 @@ class MultidexProject extends Project {
   apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
   android {
-      compileSdkVersion 31
+      compileSdk 34
 
       compileOptions {
           sourceCompatibility JavaVersion.VERSION_1_8
@@ -180,8 +162,8 @@ class MultidexProject extends Project {
       defaultConfig {
           // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
           applicationId "com.example.multidextest2"
-          minSdkVersion 16
-          targetSdkVersion 30
+          minSdkVersion 19
+          targetSdkVersion 33
           versionCode flutterVersionCode.toInteger()
           versionName flutterVersionName
       }
@@ -212,7 +194,7 @@ class MultidexProject extends Project {
   ''';
 
   String get androidGradleProperties => '''
-  org.gradle.jvmargs=-Xmx1536M
+  org.gradle.jvmargs=-Xmx4G
   android.useAndroidX=true
   android.enableJetifier=true
   android.enableR8=true
@@ -227,6 +209,7 @@ class MultidexProject extends Project {
           android:name="${applicationName}">
           <activity
               android:name=".MainActivity"
+              android:exported="true"
               android:launchMode="singleTop"
               android:theme="@style/LaunchTheme"
               android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -298,18 +281,23 @@ class MultidexProject extends Project {
 
   String get appMultidexApplication => r'''
   // Generated file.
+  //
   // If you wish to remove Flutter's multidex support, delete this entire file.
+  //
+  // Modifications to this file should be done in a copy under a different name
+  // as this file may be regenerated.
 
   package io.flutter.app;
 
+  import android.app.Application;
   import android.content.Context;
   import androidx.annotation.CallSuper;
   import androidx.multidex.MultiDex;
 
   /**
-   * Extension of {@link io.flutter.app.FlutterApplication}, adding multidex support.
+   * Extension of {@link android.app.Application}, adding multidex support.
    */
-  public class FlutterMultiDexApplication extends FlutterApplication {
+  public class FlutterMultiDexApplication extends Application {
     @Override
     @CallSuper
     protected void attachBaseContext(Context base) {

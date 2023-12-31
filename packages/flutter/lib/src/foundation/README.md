@@ -4,8 +4,8 @@ can't depend on any `package:`, and they can't depend on anything
 outside this directory.
 
 Currently they do depend on dart:ui, but only for `VoidCallback` and
-`hashValues` (and maybe one day `hashList` and `lerpDouble`), which
-are all intended to be moved out of `dart:ui` and into `dart:core`.
+`clampDouble` (and maybe one day `lerpDouble`), which are all intended
+to be moved out of `dart:ui` and into `dart:core`.
 
 There is currently also an unfortunate dependency on the platform
 dispatcher logic (SingletonFlutterWindow, Brightness,
@@ -14,5 +14,4 @@ PlatformDispatcher, window), though that should probably move to the
 
 See also:
 
- * https://github.com/dart-lang/sdk/issues/27791 (`VoidCallback`)
- * https://github.com/dart-lang/sdk/issues/25217 (`hashValues`, `hashList`, and `lerpDouble`)
+ * https://github.com/dart-lang/sdk/issues/25217

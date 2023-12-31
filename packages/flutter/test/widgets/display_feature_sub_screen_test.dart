@@ -4,8 +4,6 @@
 
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,7 +11,7 @@ void main() {
   group('DisplayFeatureSubScreen', () {
     testWidgets('without Directionality or anchor', (WidgetTester tester) async {
       const Key childKey = Key('childKey');
-      final MediaQueryData mediaQuery = MediaQueryData.fromWindow(WidgetsBinding.instance.window).copyWith(
+      final MediaQueryData mediaQuery = MediaQueryData.fromView(tester.view).copyWith(
           displayFeatures: <DisplayFeature>[
             const DisplayFeature(
               bounds: Rect.fromLTRB(390, 0, 410, 600),
@@ -27,10 +25,8 @@ void main() {
         MediaQuery(
           data: mediaQuery,
           child: const DisplayFeatureSubScreen(
-            child: SizedBox(
+            child: SizedBox.expand(
               key: childKey,
-              width: double.infinity,
-              height: double.infinity,
             ),
           ),
         ),
@@ -43,7 +39,7 @@ void main() {
 
     testWidgets('with anchorPoint', (WidgetTester tester) async {
       const Key childKey = Key('childKey');
-      final MediaQueryData mediaQuery = MediaQueryData.fromWindow(WidgetsBinding.instance.window).copyWith(
+      final MediaQueryData mediaQuery = MediaQueryData.fromView(tester.view).copyWith(
           displayFeatures: <DisplayFeature>[
             const DisplayFeature(
               bounds: Rect.fromLTRB(390, 0, 410, 600),
@@ -58,10 +54,8 @@ void main() {
           data: mediaQuery,
           child: const DisplayFeatureSubScreen(
             anchorPoint: Offset(600, 300),
-            child: SizedBox(
+            child: SizedBox.expand(
               key: childKey,
-              width: double.infinity,
-              height: double.infinity,
             ),
           ),
         ),
@@ -76,7 +70,7 @@ void main() {
 
     testWidgets('with infinity anchorpoint', (WidgetTester tester) async {
       const Key childKey = Key('childKey');
-      final MediaQueryData mediaQuery = MediaQueryData.fromWindow(WidgetsBinding.instance.window).copyWith(
+      final MediaQueryData mediaQuery = MediaQueryData.fromView(tester.view).copyWith(
           displayFeatures: <DisplayFeature>[
             const DisplayFeature(
               bounds: Rect.fromLTRB(390, 0, 410, 600),
@@ -91,10 +85,8 @@ void main() {
           data: mediaQuery,
           child: const DisplayFeatureSubScreen(
             anchorPoint: Offset.infinite,
-            child: SizedBox(
+            child: SizedBox.expand(
               key: childKey,
-              width: double.infinity,
-              height: double.infinity,
             ),
           ),
         ),
@@ -109,7 +101,7 @@ void main() {
 
     testWidgets('with horizontal hinge and anchorPoint', (WidgetTester tester) async {
       const Key childKey = Key('childKey');
-      final MediaQueryData mediaQuery = MediaQueryData.fromWindow(WidgetsBinding.instance.window).copyWith(
+      final MediaQueryData mediaQuery = MediaQueryData.fromView(tester.view).copyWith(
           displayFeatures: <DisplayFeature>[
             const DisplayFeature(
               bounds: Rect.fromLTRB(0, 290, 800, 310),
@@ -124,10 +116,8 @@ void main() {
           data: mediaQuery,
           child: const DisplayFeatureSubScreen(
             anchorPoint: Offset(1000, 1000),
-            child: SizedBox(
+            child: SizedBox.expand(
               key: childKey,
-              width: double.infinity,
-              height: double.infinity,
             ),
           ),
         ),
@@ -141,7 +131,7 @@ void main() {
 
     testWidgets('with multiple display features and anchorPoint', (WidgetTester tester) async {
       const Key childKey = Key('childKey');
-      final MediaQueryData mediaQuery = MediaQueryData.fromWindow(WidgetsBinding.instance.window).copyWith(
+      final MediaQueryData mediaQuery = MediaQueryData.fromView(tester.view).copyWith(
           displayFeatures: <DisplayFeature>[
             const DisplayFeature(
               bounds: Rect.fromLTRB(0, 290, 800, 310),
@@ -161,10 +151,8 @@ void main() {
           data: mediaQuery,
           child: const DisplayFeatureSubScreen(
             anchorPoint: Offset(1000, 1000),
-            child: SizedBox(
+            child: SizedBox.expand(
               key: childKey,
-              width: double.infinity,
-              height: double.infinity,
             ),
           ),
         ),
@@ -178,7 +166,7 @@ void main() {
 
     testWidgets('with non-splitting display features and anchorPoint', (WidgetTester tester) async {
       const Key childKey = Key('childKey');
-      final MediaQueryData mediaQuery = MediaQueryData.fromWindow(WidgetsBinding.instance.window).copyWith(
+      final MediaQueryData mediaQuery = MediaQueryData.fromView(tester.view).copyWith(
           displayFeatures: <DisplayFeature>[
             // Top notch
             const DisplayFeature(
@@ -192,6 +180,11 @@ void main() {
               type: DisplayFeatureType.cutout,
               state: DisplayFeatureState.unknown,
             ),
+            const DisplayFeature(
+              bounds: Rect.fromLTRB(0, 300, 800, 300),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            ),
           ]
       );
 
@@ -201,10 +194,8 @@ void main() {
           child: const Directionality(
             textDirection: TextDirection.ltr,
             child: DisplayFeatureSubScreen(
-              child: SizedBox(
+              child: SizedBox.expand(
                 key: childKey,
-                width: double.infinity,
-                height: double.infinity,
               ),
             ),
           ),
@@ -216,6 +207,36 @@ void main() {
       expect(renderBox.size.width, equals(800.0));
       expect(renderBox.size.height, equals(600.0));
       expect(renderBox.localToGlobal(Offset.zero), equals(Offset.zero));
+    });
+
+    testWidgets('with size 0 display feature in half-opened posture and anchorPoint', (WidgetTester tester) async {
+      const Key childKey = Key('childKey');
+      final MediaQueryData mediaQuery = MediaQueryData.fromView(tester.view).copyWith(
+          displayFeatures: <DisplayFeature>[
+            const DisplayFeature(
+              bounds: Rect.fromLTRB(0, 300, 800, 300),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureHalfOpened,
+            ),
+          ]
+      );
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: mediaQuery,
+          child: const DisplayFeatureSubScreen(
+            anchorPoint: Offset(1000, 1000),
+            child: SizedBox.expand(
+              key: childKey,
+            ),
+          ),
+        ),
+      );
+
+      final RenderBox renderBox = tester.renderObject(find.byKey(childKey));
+      expect(renderBox.size.width, equals(800.0));
+      expect(renderBox.size.height, equals(300.0));
+      expect(renderBox.localToGlobal(Offset.zero), equals(const Offset(0,300)));
     });
   });
 }

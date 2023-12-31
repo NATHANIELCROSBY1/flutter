@@ -20,12 +20,14 @@ DART_SDK_PATH="$FLUTTER_ROOT/bin/cache/dart-sdk"
 DART_SDK_PATH_OLD="$DART_SDK_PATH.old"
 ENGINE_STAMP="$FLUTTER_ROOT/bin/cache/engine-dart-sdk.stamp"
 ENGINE_VERSION=`cat "$FLUTTER_ROOT/bin/internal/engine.version"`
+ENGINE_REALM=`cat "$FLUTTER_ROOT/bin/internal/engine.realm"`
+OS="$(uname -s)"
 
 if [ ! -f "$ENGINE_STAMP" ] || [ "$ENGINE_VERSION" != `cat "$ENGINE_STAMP"` ]; then
   command -v curl > /dev/null 2>&1 || {
     >&2 echo
     >&2 echo 'Missing "curl" tool. Unable to download Dart SDK.'
-    case "$(uname -s)" in
+    case "$OS" in
       Darwin)
         >&2 echo 'Consider running "brew install curl".'
         ;;
@@ -42,7 +44,7 @@ if [ ! -f "$ENGINE_STAMP" ] || [ "$ENGINE_VERSION" != `cat "$ENGINE_STAMP"` ]; t
   command -v unzip > /dev/null 2>&1 || {
     >&2 echo
     >&2 echo 'Missing "unzip" tool. Unable to extract Dart SDK.'
-    case "$(uname -s)" in
+    case "$OS" in
       Darwin)
         echo 'Consider running "brew install unzip".'
         ;;
@@ -56,20 +58,43 @@ if [ ! -f "$ENGINE_STAMP" ] || [ "$ENGINE_VERSION" != `cat "$ENGINE_STAMP"` ]; t
     echo
     exit 1
   }
-  >&2 echo "Downloading Dart SDK from Flutter engine $ENGINE_VERSION..."
 
-  # On x64 stdout is "uname -m: x86_64"
-  # On arm64 stdout is "uname -m: aarch64, arm64_v8a"
-  case "$(uname -m)" in
-    x86_64)
-      ARCH="x64"
-      ;;
-    *)
-      ARCH="arm64"
-      ;;
-  esac
+  # `uname -m` may be running in Rosetta mode, instead query sysctl
+  if [ "$OS" = 'Darwin' ]; then
+    # Allow non-zero exit so we can do control flow
+    set +e
+    # -n means only print value, not key
+    QUERY="sysctl -n hw.optional.arm64"
+    # Do not wrap $QUERY in double quotes, otherwise the args will be treated as
+    # part of the command
+    QUERY_RESULT=$($QUERY 2>/dev/null)
+    if [ $? -eq 1 ]; then
+      # If this command fails, we're certainly not on ARM
+      ARCH='x64'
+    elif [ "$QUERY_RESULT" = '0' ]; then
+      # If this returns 0, we are also not on ARM
+      ARCH='x64'
+    elif [ "$QUERY_RESULT" = '1' ]; then
+      ARCH='arm64'
+    else
+      >&2 echo "'$QUERY' returned unexpected output: '$QUERY_RESULT'"
+      exit 1
+    fi
+    set -e
+  else
+    # On x64 stdout is "uname -m: x86_64"
+    # On arm64 stdout is "uname -m: aarch64, arm64_v8a"
+    case "$(uname -m)" in
+      x86_64)
+        ARCH="x64"
+        ;;
+      *)
+        ARCH="arm64"
+        ;;
+    esac
+  fi
 
-  case "$(uname -s)" in
+  case "$OS" in
     Darwin)
       DART_ZIP_NAME="dart-sdk-darwin-${ARCH}.zip"
       IS_USER_EXECUTABLE="-perm +100"
@@ -78,7 +103,7 @@ if [ ! -f "$ENGINE_STAMP" ] || [ "$ENGINE_VERSION" != `cat "$ENGINE_STAMP"` ]; t
       DART_ZIP_NAME="dart-sdk-linux-${ARCH}.zip"
       IS_USER_EXECUTABLE="-perm /u+x"
       ;;
-    MINGW*)
+    MINGW* | MSYS* )
       DART_ZIP_NAME="dart-sdk-windows-x64.zip"
       IS_USER_EXECUTABLE="-perm /u+x"
       ;;
@@ -88,6 +113,8 @@ if [ ! -f "$ENGINE_STAMP" ] || [ "$ENGINE_VERSION" != `cat "$ENGINE_STAMP"` ]; t
       ;;
   esac
 
+  >&2 echo "Downloading $OS $ARCH Dart SDK from Flutter engine $ENGINE_VERSION..."
+
   # Use the default find if possible.
   if [ -e /usr/bin/find ]; then
     FIND=/usr/bin/find
@@ -95,7 +122,7 @@ if [ ! -f "$ENGINE_STAMP" ] || [ "$ENGINE_VERSION" != `cat "$ENGINE_STAMP"` ]; t
     FIND=find
   fi
 
-  DART_SDK_BASE_URL="${FLUTTER_STORAGE_BASE_URL:-https://storage.googleapis.com}"
+  DART_SDK_BASE_URL="${FLUTTER_STORAGE_BASE_URL:-https://storage.googleapis.com}${ENGINE_REALM:+/$ENGINE_REALM}"
   DART_SDK_URL="$DART_SDK_BASE_URL/flutter_infra_release/flutter/$ENGINE_VERSION/$DART_ZIP_NAME"
 
   # if the sdk path exists, copy it to a temporary location
@@ -143,7 +170,7 @@ if [ ! -f "$ENGINE_STAMP" ] || [ "$ENGINE_VERSION" != `cat "$ENGINE_STAMP"` ]; t
     >&2 echo
     >&2 echo "It appears that the downloaded file is corrupt; please try again."
     >&2 echo "If this problem persists, please report the problem at:"
-    >&2 echo "  https://github.com/flutter/flutter/issues/new?template=1_activation.md"
+    >&2 echo "  https://github.com/flutter/flutter/issues/new?template=1_activation.yml"
     >&2 echo
     rm -f -- "$DART_SDK_ZIP"
     exit 1

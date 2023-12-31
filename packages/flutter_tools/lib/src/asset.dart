@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:typed_data';
+
 import 'package:meta/meta.dart';
 import 'package:package_config/package_config.dart';
+import 'package:standard_message_codec/standard_message_codec.dart';
 
+import 'base/common.dart';
 import 'base/context.dart';
 import 'base/deferred_component.dart';
 import 'base/file_system.dart';
@@ -22,6 +26,9 @@ import 'project.dart';
 const String defaultManifestPath = 'pubspec.yaml';
 
 const String kFontManifestJson = 'FontManifest.json';
+
+// Should match '2x', '/1x', '1.5x', etc.
+final RegExp _assetVariantDirectoryRegExp = RegExp(r'/?(\d+(\.\d*)?)x$');
 
 /// The effect of adding `uses-material-design: true` to the pubspec is to insert
 /// the following snippet into the asset manifest:
@@ -43,6 +50,10 @@ const List<Map<String, Object>> kMaterialFonts = <Map<String, Object>>[
   },
 ];
 
+const List<String> kMaterialShaders = <String>[
+  'shaders/ink_sparkle.frag',
+];
+
 /// Injected factory class for spawning [AssetBundle] instances.
 abstract class AssetBundleFactory {
   /// The singleton instance, pulled from the [AppContext].
@@ -59,8 +70,17 @@ abstract class AssetBundleFactory {
   AssetBundle createBundle();
 }
 
+enum AssetKind {
+  regular,
+  font,
+  shader,
+  model,
+}
+
 abstract class AssetBundle {
   Map<String, DevFSContent> get entries;
+
+  Map<String, AssetKind> get entryKinds;
 
   /// The files that were specified under the deferred components assets sections
   /// in pubspec.
@@ -80,10 +100,10 @@ abstract class AssetBundle {
   /// Returns 0 for success; non-zero for failure.
   Future<int> build({
     String manifestPath = defaultManifestPath,
-    String? assetDirPath,
     required String packagesPath,
     bool deferredComponentsEnabled = false,
     TargetPlatform? targetPlatform,
+    String? flavor,
   });
 }
 
@@ -132,6 +152,9 @@ class ManifestAssetBundle implements AssetBundle {
   final Map<String, DevFSContent> entries = <String, DevFSContent>{};
 
   @override
+  final Map<String, AssetKind> entryKinds = <String, AssetKind>{};
+
+  @override
   final Map<String, Map<String, DevFSContent>> deferredComponentsEntries = <String, Map<String, DevFSContent>>{};
 
   @override
@@ -144,7 +167,11 @@ class ManifestAssetBundle implements AssetBundle {
 
   DateTime? _lastBuildTimestamp;
 
-  static const String _kAssetManifestJson = 'AssetManifest.json';
+  // We assume the main asset is designed for a device pixel ratio of 1.0.
+  static const String _kAssetManifestJsonFilename = 'AssetManifest.json';
+  static const String _kAssetManifestBinFilename = 'AssetManifest.bin';
+  static const String _kAssetManifestBinJsonFilename = 'AssetManifest.bin.json';
+
   static const String _kNoticeFile = 'NOTICES';
   // Comically, this can't be name with the more common .gz file extension
   // because when it's part of an AAR and brought into another APK via gradle,
@@ -175,9 +202,6 @@ class ManifestAssetBundle implements AssetBundle {
       }
       for (final File file in directory.listSync().whereType<File>()) {
         final DateTime dateTime = file.statSync().modified;
-        if (dateTime == null) {
-          continue;
-        }
         if (dateTime.isAfter(lastBuildTimestamp)) {
           return true;
         }
@@ -190,30 +214,40 @@ class ManifestAssetBundle implements AssetBundle {
   @override
   Future<int> build({
     String manifestPath = defaultManifestPath,
-    String? assetDirPath,
+    FlutterProject? flutterProject,
     required String packagesPath,
     bool deferredComponentsEnabled = false,
     TargetPlatform? targetPlatform,
+    String? flavor,
   }) async {
-    assetDirPath ??= getAssetBuildDirectory();
-    FlutterProject flutterProject;
-    try {
-      flutterProject = FlutterProject.fromDirectory(_fileSystem.file(manifestPath).parent);
-    } on Exception catch (e) {
-      _logger.printStatus('Error detected in pubspec.yaml:', emphasis: true);
-      _logger.printError('$e');
-      return 1;
-    }
     if (flutterProject == null) {
-      return 1;
+      try {
+        flutterProject = FlutterProject.fromDirectory(_fileSystem.file(manifestPath).parent);
+      } on Exception catch (e) {
+        _logger.printStatus('Error detected in pubspec.yaml:', emphasis: true);
+        _logger.printError('$e');
+        return 1;
+      }
     }
+
     final FlutterManifest flutterManifest = flutterProject.manifest;
     // If the last build time isn't set before this early return, empty pubspecs will
     // hang on hot reload, as the incremental dill files will never be copied to the
     // device.
     _lastBuildTimestamp = DateTime.now();
     if (flutterManifest.isEmpty) {
-      entries[_kAssetManifestJson] = DevFSStringContent('{}');
+      entries[_kAssetManifestJsonFilename] = DevFSStringContent('{}');
+      entryKinds[_kAssetManifestJsonFilename] = AssetKind.regular;
+      final ByteData emptyAssetManifest =
+        const StandardMessageCodec().encodeMessage(<dynamic, dynamic>{})!;
+      entries[_kAssetManifestBinFilename] =
+        DevFSByteContent(emptyAssetManifest.buffer.asUint8List(0, emptyAssetManifest.lengthInBytes));
+      entryKinds[_kAssetManifestBinFilename] = AssetKind.regular;
+      // Create .bin.json on web builds.
+      if (targetPlatform == TargetPlatform.web_javascript) {
+        entries[_kAssetManifestBinJsonFilename] = DevFSStringContent('""');
+        entryKinds[_kAssetManifestBinJsonFilename] = AssetKind.regular;
+      }
       return 0;
     }
 
@@ -227,41 +261,30 @@ class ManifestAssetBundle implements AssetBundle {
     final List<Uri> wildcardDirectories = <Uri>[];
 
     // The _assetVariants map contains an entry for each asset listed
-    // in the pubspec.yaml file's assets and font and sections. The
+    // in the pubspec.yaml file's assets and font sections. The
     // value of each image asset is a list of resolution-specific "variants",
     // see _AssetDirectoryCache.
-    final List<String> excludeDirs = <String>[
-      assetDirPath,
-      getBuildDirectory(),
-      if (flutterProject.ios.existsSync())
-        flutterProject.ios.hostAppRoot.path,
-      if (flutterProject.macos.existsSync())
-        flutterProject.macos.managedDirectory.path,
-      if (flutterProject.windows.existsSync())
-        flutterProject.windows.managedDirectory.path,
-      if (flutterProject.linux.existsSync())
-        flutterProject.linux.managedDirectory.path,
-    ];
     final Map<_Asset, List<_Asset>>? assetVariants = _parseAssets(
       packageConfig,
       flutterManifest,
       wildcardDirectories,
       assetBasePath,
-      excludeDirs: excludeDirs,
+      targetPlatform,
+      flavor: flavor,
     );
 
     if (assetVariants == null) {
       return 1;
     }
 
-    // Parse assets for  deferred components.
+    // Parse assets for deferred components.
     final Map<String, Map<_Asset, List<_Asset>>> deferredComponentsAssetVariants = _parseDeferredComponentsAssets(
       flutterManifest,
       packageConfig,
       assetBasePath,
       wildcardDirectories,
       flutterProject.directory,
-      excludeDirs: excludeDirs,
+      flavor: flavor,
     );
     if (!_splitDeferredAssets || !deferredComponentsEnabled) {
       // Include the assets in the regular set of assets if not using deferred
@@ -282,7 +305,7 @@ class ManifestAssetBundle implements AssetBundle {
     final Map<String, List<File>> additionalLicenseFiles = <String, List<File>>{};
     for (final Package package in packageConfig.packages) {
       final Uri packageUri = package.packageUriRoot;
-      if (packageUri != null && packageUri.scheme == 'file') {
+      if (packageUri.scheme == 'file') {
         final String packageManifestPath = _fileSystem.path.fromUri(packageUri.resolve('../pubspec.yaml'));
         inputFiles.add(_fileSystem.file(packageManifestPath));
         final FlutterManifest? packageFlutterManifest = FlutterManifest.createFromPath(
@@ -313,6 +336,7 @@ class ManifestAssetBundle implements AssetBundle {
           // Do not track wildcard directories for dependencies.
           <Uri>[],
           packageBasePath,
+          targetPlatform,
           packageName: package.name,
           attributedPackage: package,
         );
@@ -357,8 +381,7 @@ class ManifestAssetBundle implements AssetBundle {
       // variant files exist. An image's main entry is treated the same as a
       // "1x" resolution variant and if both exist then the explicit 1x
       // variant is preferred.
-      if (assetFile.existsSync()) {
-        assert(!variants.contains(asset));
+      if (assetFile.existsSync() && !variants.contains(asset)) {
         variants.insert(0, asset);
       }
       for (final _Asset variant in variants) {
@@ -366,50 +389,53 @@ class ManifestAssetBundle implements AssetBundle {
         inputFiles.add(variantFile);
         assert(variantFile.existsSync());
         entries[variant.entryUri.path] ??= DevFSFileContent(variantFile);
+        entryKinds[variant.entryUri.path] ??= variant.assetKind;
       }
     }
     // Save the contents of each deferred component image, image variant, and font
     // asset in deferredComponentsEntries.
-    if (deferredComponentsAssetVariants != null) {
-      for (final String componentName in deferredComponentsAssetVariants.keys) {
-        deferredComponentsEntries[componentName] = <String, DevFSContent>{};
-        final Map<_Asset, List<_Asset>> assetsMap = deferredComponentsAssetVariants[componentName]!;
-        for (final _Asset asset in assetsMap.keys) {
-          final File assetFile = asset.lookupAssetFile(_fileSystem);
-          if (!assetFile.existsSync() && assetsMap[asset]!.isEmpty) {
-            _logger.printStatus('Error detected in pubspec.yaml:', emphasis: true);
-            _logger.printError('No file or variants found for $asset.\n');
-            if (asset.package != null) {
-              _logger.printError('This asset was included from package ${asset.package?.name}.');
-            }
-            return 1;
+    for (final String componentName in deferredComponentsAssetVariants.keys) {
+      deferredComponentsEntries[componentName] = <String, DevFSContent>{};
+      final Map<_Asset, List<_Asset>> assetsMap = deferredComponentsAssetVariants[componentName]!;
+      for (final _Asset asset in assetsMap.keys) {
+        final File assetFile = asset.lookupAssetFile(_fileSystem);
+        if (!assetFile.existsSync() && assetsMap[asset]!.isEmpty) {
+          _logger.printStatus('Error detected in pubspec.yaml:', emphasis: true);
+          _logger.printError('No file or variants found for $asset.\n');
+          if (asset.package != null) {
+            _logger.printError('This asset was included from package ${asset.package?.name}.');
           }
-          // The file name for an asset's "main" entry is whatever appears in
-          // the pubspec.yaml file. The main entry's file must always exist for
-          // font assets. It need not exist for an image if resolution-specific
-          // variant files exist. An image's main entry is treated the same as a
-          // "1x" resolution variant and if both exist then the explicit 1x
-          // variant is preferred.
-          if (assetFile.existsSync()) {
-            assert(!assetsMap[asset]!.contains(asset));
-            assetsMap[asset]!.insert(0, asset);
-          }
-          for (final _Asset variant in assetsMap[asset]!) {
-            final File variantFile = variant.lookupAssetFile(_fileSystem);
-            assert(variantFile.existsSync());
-            deferredComponentsEntries[componentName]![variant.entryUri.path] ??= DevFSFileContent(variantFile);
-          }
+          return 1;
+        }
+        // The file name for an asset's "main" entry is whatever appears in
+        // the pubspec.yaml file. The main entry's file must always exist for
+        // font assets. It need not exist for an image if resolution-specific
+        // variant files exist. An image's main entry is treated the same as a
+        // "1x" resolution variant and if both exist then the explicit 1x
+        // variant is preferred.
+        if (assetFile.existsSync() && !assetsMap[asset]!.contains(asset)) {
+          assetsMap[asset]!.insert(0, asset);
+        }
+        for (final _Asset variant in assetsMap[asset]!) {
+          final File variantFile = variant.lookupAssetFile(_fileSystem);
+          assert(variantFile.existsSync());
+          deferredComponentsEntries[componentName]![variant.entryUri.path] ??= DevFSFileContent(variantFile);
         }
       }
     }
     final List<_Asset> materialAssets = <_Asset>[
       if (flutterManifest.usesMaterialDesign)
-        ..._getMaterialAssets(),
+        ..._getMaterialFonts(),
+      // For all platforms, include the shaders unconditionally. They are
+      // small, and whether they're used is determined only by the app source
+      // code and not by the Flutter manifest.
+      ..._getMaterialShaders(),
     ];
     for (final _Asset asset in materialAssets) {
       final File assetFile = asset.lookupAssetFile(_fileSystem);
-      assert(assetFile.existsSync());
+      assert(assetFile.existsSync(), 'Missing ${assetFile.path}');
       entries[asset.entryUri.path] ??= DevFSFileContent(assetFile);
+      entryKinds[asset.entryUri.path] ??= asset.assetKind;
     }
 
     // Update wildcard directories we can detect changes in them.
@@ -417,7 +443,10 @@ class ManifestAssetBundle implements AssetBundle {
       _wildcardDirectories[uri] ??= _fileSystem.directory(uri);
     }
 
-    final DevFSStringContent assetManifest  = _createAssetManifest(assetVariants, deferredComponentsAssetVariants);
+    final Map<String, List<String>> assetManifest =
+      _createAssetManifest(assetVariants, deferredComponentsAssetVariants);
+    final DevFSByteContent assetManifestBinary = _createAssetManifestBinary(assetManifest);
+    final DevFSStringContent assetManifestJson = DevFSStringContent(json.encode(assetManifest));
     final DevFSStringContent fontManifest = DevFSStringContent(json.encode(fonts));
     final LicenseResult licenseResult = _licenseCollector.obtainLicenses(packageConfig, additionalLicenseFiles);
     if (licenseResult.errorMessages.isNotEmpty) {
@@ -441,24 +470,47 @@ class ManifestAssetBundle implements AssetBundle {
         _fileSystem.file('DOES_NOT_EXIST_RERUN_FOR_WILDCARD$suffix').absolute);
     }
 
-    _setIfChanged(_kAssetManifestJson, assetManifest);
-    _setIfChanged(kFontManifestJson, fontManifest);
+    _setIfChanged(_kAssetManifestJsonFilename, assetManifestJson, AssetKind.regular);
+    _setIfChanged(_kAssetManifestBinFilename, assetManifestBinary, AssetKind.regular);
+    // Create .bin.json on web builds.
+    if (targetPlatform == TargetPlatform.web_javascript) {
+      final DevFSStringContent assetManifestBinaryJson = DevFSStringContent(json.encode(
+        base64.encode(assetManifestBinary.bytes)
+      ));
+      _setIfChanged(_kAssetManifestBinJsonFilename, assetManifestBinaryJson, AssetKind.regular);
+    }
+    _setIfChanged(kFontManifestJson, fontManifest, AssetKind.regular);
     _setLicenseIfChanged(licenseResult.combinedLicenses, targetPlatform);
     return 0;
   }
 
   @override
   List<File> additionalDependencies = <File>[];
-
-  void _setIfChanged(String key, DevFSStringContent content) {
-    if (!entries.containsKey(key)) {
-      entries[key] = content;
+  void _setIfChanged(String key, DevFSContent content, AssetKind assetKind) {
+    final DevFSContent? oldContent = entries[key];
+    // In the case that the content is unchanged, we want to avoid an overwrite
+    // as the isModified property may be reset to true,
+    if (oldContent is DevFSByteContent && content is DevFSByteContent &&
+        _compareIntLists(oldContent.bytes, content.bytes)) {
       return;
     }
-    final DevFSStringContent? oldContent = entries[key] as DevFSStringContent?;
-    if (oldContent?.string != content.string) {
-      entries[key] = content;
+
+    entries[key] = content;
+    entryKinds[key] = assetKind;
+  }
+
+  static bool _compareIntLists(List<int> o1, List<int> o2) {
+    if (o1.length != o2.length) {
+      return false;
     }
+
+    for (int index = 0; index < o1.length; index++) {
+      if (o1[index] != o2[index]) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   void _setLicenseIfChanged(
@@ -469,7 +521,7 @@ class ManifestAssetBundle implements AssetBundle {
     // dart:io to decompress it. So use the standard _setIfChanged to check if
     // the strings still match.
     if (targetPlatform == TargetPlatform.web_javascript) {
-      _setIfChanged(_kNoticeFile, DevFSStringContent(combinedLicenses));
+      _setIfChanged(_kNoticeFile, DevFSStringContent(combinedLicenses), AssetKind.regular);
       return;
     }
 
@@ -487,10 +539,11 @@ class ManifestAssetBundle implements AssetBundle {
         // common English words with domain specific words like copyright.
         hintString: 'copyrightsoftwaretothisinandorofthe',
       );
+      entryKinds[_kNoticeZippedFile] = AssetKind.regular;
     }
   }
 
-  List<_Asset> _getMaterialAssets() {
+  List<_Asset> _getMaterialFonts() {
     final List<_Asset> result = <_Asset>[];
     for (final Map<String, Object> family in kMaterialFonts) {
       final Object? fonts = family['fonts'];
@@ -504,12 +557,43 @@ class ManifestAssetBundle implements AssetBundle {
         }
         final Uri entryUri = _fileSystem.path.toUri(asset);
         result.add(_Asset(
-          baseDir: _fileSystem.path.join(Cache.flutterRoot!, 'bin', 'cache', 'artifacts', 'material_fonts'),
+          baseDir: _fileSystem.path.join(
+            Cache.flutterRoot!,
+            'bin', 'cache', 'artifacts', 'material_fonts',
+          ),
           relativeUri: Uri(path: entryUri.pathSegments.last),
           entryUri: entryUri,
           package: null,
+          assetKind: AssetKind.font,
         ));
       }
+    }
+
+    return result;
+  }
+
+  List<_Asset> _getMaterialShaders() {
+    final String shaderPath = _fileSystem.path.join(
+      Cache.flutterRoot!,
+      'packages', 'flutter', 'lib', 'src', 'material', 'shaders',
+    );
+    // This file will exist in a real invocation unless the git checkout is
+    // corrupted somehow, but unit tests generally don't create this file
+    // in their mock file systems. Leaving it out in those cases is harmless.
+    if (!_fileSystem.directory(shaderPath).existsSync()) {
+      return <_Asset>[];
+    }
+
+    final List<_Asset> result = <_Asset>[];
+    for (final String shader in kMaterialShaders) {
+      final Uri entryUri = _fileSystem.path.toUri(shader);
+      result.add(_Asset(
+        baseDir: shaderPath,
+        relativeUri: Uri(path: entryUri.pathSegments.last),
+        entryUri: entryUri,
+        package: null,
+        assetKind: AssetKind.shader,
+      ));
     }
 
     return result;
@@ -527,7 +611,7 @@ class ManifestAssetBundle implements AssetBundle {
       if (packageName == null)
         ...manifest.fontsDescriptor
       else
-        for (Font font in _parsePackageFonts(
+        for (final Font font in _parsePackageFonts(
           manifest,
           packageName,
           packageConfig,
@@ -541,7 +625,7 @@ class ManifestAssetBundle implements AssetBundle {
     String assetBasePath,
     List<Uri> wildcardDirectories,
     Directory projectDirectory, {
-    List<String> excludeDirs = const <String>[],
+    String? flavor,
   }) {
     final List<DeferredComponent>? components = flutterManifest.deferredComponents;
     final Map<String, Map<_Asset, List<_Asset>>> deferredComponentsAssetVariants = <String, Map<_Asset, List<_Asset>>>{};
@@ -549,19 +633,18 @@ class ManifestAssetBundle implements AssetBundle {
       return deferredComponentsAssetVariants;
     }
     for (final DeferredComponent component in components) {
-      deferredComponentsAssetVariants[component.name] = <_Asset, List<_Asset>>{};
-      final _AssetDirectoryCache cache = _AssetDirectoryCache(<String>[], _fileSystem);
-      for (final Uri assetUri in component.assets) {
-        if (assetUri.path.endsWith('/')) {
-          wildcardDirectories.add(assetUri);
+      final _AssetDirectoryCache cache = _AssetDirectoryCache(_fileSystem);
+      final Map<_Asset, List<_Asset>> componentAssets = <_Asset, List<_Asset>>{};
+      for (final AssetsEntry assetsEntry in component.assets) {
+        if (assetsEntry.uri.path.endsWith('/')) {
+          wildcardDirectories.add(assetsEntry.uri);
           _parseAssetsFromFolder(
             packageConfig,
             flutterManifest,
             assetBasePath,
             cache,
-            deferredComponentsAssetVariants[component.name]!,
-            assetUri,
-            excludeDirs: excludeDirs,
+            componentAssets,
+            assetsEntry.uri,
           );
         } else {
           _parseAssetFromFile(
@@ -569,44 +652,92 @@ class ManifestAssetBundle implements AssetBundle {
             flutterManifest,
             assetBasePath,
             cache,
-            deferredComponentsAssetVariants[component.name]!,
-            assetUri,
-            excludeDirs: excludeDirs,
+            componentAssets,
+            assetsEntry.uri,
           );
         }
       }
+
+      componentAssets.removeWhere((_Asset asset, List<_Asset> variants) => !asset.matchesFlavor(flavor));
+      deferredComponentsAssetVariants[component.name] = componentAssets;
     }
     return deferredComponentsAssetVariants;
   }
 
-  DevFSStringContent _createAssetManifest(
+  Map<String, List<String>> _createAssetManifest(
     Map<_Asset, List<_Asset>> assetVariants,
     Map<String, Map<_Asset, List<_Asset>>> deferredComponentsAssetVariants
   ) {
-    final Map<String, List<String>> jsonObject = <String, List<String>>{};
-    final Map<_Asset, List<String>> jsonEntries = <_Asset, List<String>>{};
+    final Map<String, List<String>> manifest = <String, List<String>>{};
+    final Map<_Asset, List<String>> entries = <_Asset, List<String>>{};
     assetVariants.forEach((_Asset main, List<_Asset> variants) {
-      jsonEntries[main] = <String>[
+      entries[main] = <String>[
         for (final _Asset variant in variants)
           variant.entryUri.path,
       ];
     });
-    if (deferredComponentsAssetVariants != null) {
-      for (final Map<_Asset, List<_Asset>> componentAssets in deferredComponentsAssetVariants.values) {
-        componentAssets.forEach((_Asset main, List<_Asset> variants) {
-          jsonEntries[main] = <String>[
-            for (final _Asset variant in variants)
-              variant.entryUri.path,
-          ];
-        });
-      }
+    for (final Map<_Asset, List<_Asset>> componentAssets in deferredComponentsAssetVariants.values) {
+      componentAssets.forEach((_Asset main, List<_Asset> variants) {
+        entries[main] = <String>[
+          for (final _Asset variant in variants)
+            variant.entryUri.path,
+        ];
+      });
     }
-    final List<_Asset> sortedKeys = jsonEntries.keys.toList()
+    final List<_Asset> sortedKeys = entries.keys.toList()
         ..sort((_Asset left, _Asset right) => left.entryUri.path.compareTo(right.entryUri.path));
     for (final _Asset main in sortedKeys) {
-      jsonObject[main.entryUri.path] = jsonEntries[main]!;
+      final String decodedEntryPath = Uri.decodeFull(main.entryUri.path);
+      final List<String> rawEntryVariantsPaths = entries[main]!;
+      final List<String> decodedEntryVariantPaths = rawEntryVariantsPaths
+        .map((String value) => Uri.decodeFull(value))
+        .toList();
+      manifest[decodedEntryPath] = decodedEntryVariantPaths;
     }
-    return DevFSStringContent(json.encode(jsonObject));
+    return manifest;
+  }
+
+  // Matches path-like strings ending in a number followed by an 'x'.
+  // Example matches include "assets/animals/2.0x", "plants/3x", and "2.7x".
+  static final RegExp _extractPixelRatioFromKeyRegExp = RegExp(r'/?(\d+(\.\d*)?)x$');
+
+  DevFSByteContent _createAssetManifestBinary(
+    Map<String, List<String>> assetManifest
+  ) {
+    double? parseScale(String key) {
+      final Uri assetUri = Uri.parse(key);
+      String directoryPath = '';
+      if (assetUri.pathSegments.length > 1) {
+        directoryPath = assetUri.pathSegments[assetUri.pathSegments.length - 2];
+      }
+
+      final Match? match = _extractPixelRatioFromKeyRegExp.firstMatch(directoryPath);
+      if (match != null && match.groupCount > 0) {
+        return double.parse(match.group(1)!);
+      }
+
+      return null;
+    }
+
+    final Map<String, dynamic> result = <String, dynamic>{};
+
+    for (final MapEntry<String, dynamic> manifestEntry in assetManifest.entries) {
+      final List<dynamic> resultVariants = <dynamic>[];
+      final List<String> entries = (manifestEntry.value as List<dynamic>).cast<String>();
+      for (final String variant in entries) {
+        final Map<String, dynamic> resultVariant = <String, dynamic>{};
+        final double? variantDevicePixelRatio = parseScale(variant);
+        resultVariant['asset'] = variant;
+        if (variantDevicePixelRatio != null) {
+          resultVariant['dpr'] = variantDevicePixelRatio;
+        }
+        resultVariants.add(resultVariant);
+      }
+      result[manifestEntry.key] = resultVariants;
+    }
+
+    final ByteData message = const StandardMessageCodec().encodeMessage(result)!;
+    return DevFSByteContent(message.buffer.asUint8List(0, message.lengthInBytes));
   }
 
   /// Prefixes family names and asset paths of fonts included from packages with
@@ -671,27 +802,28 @@ class ManifestAssetBundle implements AssetBundle {
     PackageConfig packageConfig,
     FlutterManifest flutterManifest,
     List<Uri> wildcardDirectories,
-    String assetBase, {
-    List<String> excludeDirs = const <String>[],
+    String assetBase,
+    TargetPlatform? targetPlatform, {
     String? packageName,
     Package? attributedPackage,
+    String? flavor,
   }) {
     final Map<_Asset, List<_Asset>> result = <_Asset, List<_Asset>>{};
 
-    final _AssetDirectoryCache cache = _AssetDirectoryCache(excludeDirs, _fileSystem);
-    for (final Uri assetUri in flutterManifest.assets) {
-      if (assetUri.path.endsWith('/')) {
-        wildcardDirectories.add(assetUri);
+    final _AssetDirectoryCache cache = _AssetDirectoryCache(_fileSystem);
+    for (final AssetsEntry assetsEntry in flutterManifest.assets) {
+      if (assetsEntry.uri.path.endsWith('/')) {
+        wildcardDirectories.add(assetsEntry.uri);
         _parseAssetsFromFolder(
           packageConfig,
           flutterManifest,
           assetBase,
           cache,
           result,
-          assetUri,
-          excludeDirs: excludeDirs,
+          assetsEntry.uri,
           packageName: packageName,
           attributedPackage: attributedPackage,
+          flavors: assetsEntry.flavors,
         );
       } else {
         _parseAssetFromFile(
@@ -700,12 +832,50 @@ class ManifestAssetBundle implements AssetBundle {
           assetBase,
           cache,
           result,
-          assetUri,
-          excludeDirs: excludeDirs,
+          assetsEntry.uri,
           packageName: packageName,
           attributedPackage: attributedPackage,
+          flavors: assetsEntry.flavors,
         );
       }
+    }
+
+    result.removeWhere((_Asset asset, List<_Asset> variants) {
+      if (!asset.matchesFlavor(flavor)) {
+        _logger.printTrace('Skipping assets entry "${asset.entryUri.path}" since '
+          'its configured flavor(s) did not match the provided flavor (if any).\n'
+          'Configured flavors: ${asset.flavors.join(', ')}\n');
+        return true;
+      }
+      return false;
+    });
+
+    for (final Uri shaderUri in flutterManifest.shaders) {
+      _parseAssetFromFile(
+        packageConfig,
+        flutterManifest,
+        assetBase,
+        cache,
+        result,
+        shaderUri,
+        packageName: packageName,
+        attributedPackage: attributedPackage,
+        assetKind: AssetKind.shader,
+      );
+    }
+
+    for (final Uri modelUri in flutterManifest.models) {
+      _parseAssetFromFile(
+        packageConfig,
+        flutterManifest,
+        assetBase,
+        cache,
+        result,
+        modelUri,
+        packageName: packageName,
+        attributedPackage: attributedPackage,
+        assetKind: AssetKind.model,
+      );
     }
 
     // Add assets referenced in the fonts section of the manifest.
@@ -717,6 +887,7 @@ class ManifestAssetBundle implements AssetBundle {
           fontAsset.assetUri,
           packageName,
           attributedPackage,
+          assetKind: AssetKind.font,
         );
         final File baseAssetFile = baseAsset.lookupAssetFile(_fileSystem);
         if (!baseAssetFile.existsSync()) {
@@ -726,6 +897,7 @@ class ManifestAssetBundle implements AssetBundle {
         result[baseAsset] = <_Asset>[];
       }
     }
+
     return result;
   }
 
@@ -736,9 +908,9 @@ class ManifestAssetBundle implements AssetBundle {
     _AssetDirectoryCache cache,
     Map<_Asset, List<_Asset>> result,
     Uri assetUri, {
-    List<String> excludeDirs = const <String>[],
     String? packageName,
     Package? attributedPackage,
+    List<String>? flavors,
   }) {
     final String directoryPath = _fileSystem.path.join(
         assetBase, assetUri.toFilePath(windows: _platform.isWindows));
@@ -748,10 +920,9 @@ class ManifestAssetBundle implements AssetBundle {
       return;
     }
 
-    final Iterable<File> files = _fileSystem
-      .directory(directoryPath)
-      .listSync()
-      .whereType<File>();
+    final Iterable<FileSystemEntity> entities = _fileSystem.directory(directoryPath).listSync();
+
+    final Iterable<File> files = entities.whereType<File>();
     for (final File file in files) {
       final String relativePath = _fileSystem.path.relative(file.path, from: assetBase);
       final Uri uri = Uri.file(relativePath, windows: _platform.isWindows);
@@ -765,6 +936,8 @@ class ManifestAssetBundle implements AssetBundle {
         uri,
         packageName: packageName,
         attributedPackage: attributedPackage,
+        originUri: assetUri,
+        flavors: flavors,
       );
     }
   }
@@ -776,9 +949,11 @@ class ManifestAssetBundle implements AssetBundle {
     _AssetDirectoryCache cache,
     Map<_Asset, List<_Asset>> result,
     Uri assetUri, {
-    List<String> excludeDirs = const <String>[],
+    Uri? originUri,
     String? packageName,
     Package? attributedPackage,
+    AssetKind assetKind = AssetKind.regular,
+    List<String>? flavors,
   }) {
     final _Asset asset = _resolveAsset(
       packageConfig,
@@ -786,9 +961,16 @@ class ManifestAssetBundle implements AssetBundle {
       assetUri,
       packageName,
       attributedPackage,
+      assetKind: assetKind,
+      originUri: originUri,
+      flavors: flavors,
     );
+
+    _checkForFlavorConflicts(asset, result.keys.toList());
+
     final List<_Asset> variants = <_Asset>[];
     final File assetFile = asset.lookupAssetFile(_fileSystem);
+
     for (final String path in cache.variantsFor(assetFile.path)) {
       final String relativePath = _fileSystem.path.relative(path, from: asset.baseDir);
       final Uri relativeUri = _fileSystem.path.toUri(relativePath);
@@ -802,6 +984,7 @@ class ManifestAssetBundle implements AssetBundle {
             entryUri: entryUri,
             relativeUri: relativeUri,
             package: attributedPackage,
+            assetKind: assetKind,
           ),
         );
       }
@@ -810,13 +993,84 @@ class ManifestAssetBundle implements AssetBundle {
     result[asset] = variants;
   }
 
+  // Since it is not clear how overlapping asset declarations should work in the
+  // presence of conditions such as `flavor`, we throw an Error.
+  //
+  // To be more specific, it is not clear if conditions should be combined with
+  // or-logic or and-logic, or if it should depend on the specificity of the
+  // declarations (file versus directory). If you would like examples, consider these:
+  //
+  // ```yaml
+  // # Should assets/free.mp3 always be included since "assets/" has no flavor?
+  // assets:
+  //   - assets/
+  //   - path: assets/free.mp3
+  //     flavor: free
+  //
+  // # Should "assets/paid/pip.mp3" be included for both the "paid" and "free" flavors?
+  // # Or, since "assets/paid/pip.mp3" is more specific than "assets/paid/"", should
+  // # it take precedence over the latter (included only in "free" flavor)?
+  // assets:
+  //   - path: assets/paid/
+  //     flavor: paid
+  //   - path: assets/paid/pip.mp3
+  //     flavor: free
+  //   - asset
+  // ```
+  //
+  // Since it is not obvious what logic (if any) would be intuitive and preferable
+  // to the vast majority of users (if any), we play it safe by throwing a `ToolExit`
+  // in any of these situations. We can always loosen up this restriction later
+  // without breaking anyone.
+  void _checkForFlavorConflicts(_Asset newAsset, List<_Asset> previouslyParsedAssets) {
+    bool cameFromDirectoryEntry(_Asset asset) {
+      return asset.originUri.path.endsWith('/');
+    }
+
+    String flavorErrorInfo(_Asset asset) {
+      if (asset.flavors.isEmpty) {
+        return 'An entry with the path "${asset.originUri}" does not specify any flavors.';
+      }
+
+      final Iterable<String> flavorsWrappedWithQuotes = asset.flavors.map((String e) => '"$e"');
+      return 'An entry with the path "${asset.originUri}" specifies the flavor(s): '
+        '${flavorsWrappedWithQuotes.join(', ')}.';
+    }
+
+    final _Asset? preExistingAsset = previouslyParsedAssets
+        .where((_Asset other) => other.entryUri == newAsset.entryUri)
+        .firstOrNull;
+
+    if (preExistingAsset == null || preExistingAsset.hasEquivalentFlavorsWith(newAsset)) {
+      return;
+    }
+
+    final StringBuffer errorMessage = StringBuffer(
+      'Multiple assets entries include the file '
+      '"${newAsset.entryUri.path}", but they specify different lists of flavors.\n');
+
+    errorMessage.writeln(flavorErrorInfo(preExistingAsset));
+    errorMessage.writeln(flavorErrorInfo(newAsset));
+
+    if (cameFromDirectoryEntry(newAsset)|| cameFromDirectoryEntry(preExistingAsset)) {
+      errorMessage.writeln();
+      errorMessage.write('Consider organizing assets with different flavors '
+        'into different directories.');
+    }
+
+    throwToolExit(errorMessage.toString());
+  }
+
   _Asset _resolveAsset(
     PackageConfig packageConfig,
     String assetsBaseDir,
     Uri assetUri,
     String? packageName,
-    Package? attributedPackage,
-  ) {
+    Package? attributedPackage, {
+    Uri? originUri,
+    AssetKind assetKind = AssetKind.regular,
+    List<String>? flavors,
+  }) {
     final String assetPath = _fileSystem.path.fromUri(assetUri);
     if (assetUri.pathSegments.first == 'packages'
       && !_fileSystem.isFileSync(_fileSystem.path.join(assetsBaseDir, assetPath))) {
@@ -826,6 +1080,9 @@ class ManifestAssetBundle implements AssetBundle {
         assetUri,
         packageConfig,
         attributedPackage,
+        assetKind: assetKind,
+        originUri: originUri,
+        flavors: flavors,
       );
       if (packageAsset != null) {
         return packageAsset;
@@ -839,10 +1096,20 @@ class ManifestAssetBundle implements AssetBundle {
           : Uri(pathSegments: <String>['packages', packageName, ...assetUri.pathSegments]), // Asset from, and declared in $packageName.
       relativeUri: assetUri,
       package: attributedPackage,
+      originUri: originUri,
+      assetKind: assetKind,
+      flavors: flavors,
     );
   }
 
-  _Asset? _resolvePackageAsset(Uri assetUri, PackageConfig packageConfig, Package? attributedPackage) {
+  _Asset? _resolvePackageAsset(
+    Uri assetUri,
+    PackageConfig packageConfig,
+    Package? attributedPackage, {
+    AssetKind assetKind = AssetKind.regular,
+    Uri? originUri,
+    List<String>? flavors,
+  }) {
     assert(assetUri.pathSegments.first == 'packages');
     if (assetUri.pathSegments.length > 1) {
       final String packageName = assetUri.pathSegments[1];
@@ -854,6 +1121,9 @@ class ManifestAssetBundle implements AssetBundle {
           entryUri: assetUri,
           relativeUri: Uri(pathSegments: assetUri.pathSegments.sublist(2)),
           package: attributedPackage,
+          assetKind: assetKind,
+          originUri: originUri,
+          flavors: flavors,
         );
       }
     }
@@ -870,14 +1140,21 @@ class ManifestAssetBundle implements AssetBundle {
 class _Asset {
   const _Asset({
     required this.baseDir,
+    Uri? originUri,
     required this.relativeUri,
     required this.entryUri,
     required this.package,
-  });
+    this.assetKind = AssetKind.regular,
+    List<String>? flavors,
+  }): originUri = originUri ?? entryUri, flavors = flavors ?? const <String>[];
 
   final String baseDir;
 
   final Package? package;
+
+  /// The platform-independent URL provided by the user in the pubspec that this
+  /// asset was found from.
+  final Uri originUri;
 
   /// A platform-independent URL where this asset can be found on disk on the
   /// host system relative to [baseDir].
@@ -885,6 +1162,10 @@ class _Asset {
 
   /// A platform-independent URL representing the entry for the asset manifest.
   final Uri entryUri;
+
+  final AssetKind assetKind;
+
+  final List<String> flavors;
 
   File lookupAssetFile(FileSystem fileSystem) {
     return fileSystem.file(fileSystem.path.join(baseDir, fileSystem.path.fromUri(relativeUri)));
@@ -898,6 +1179,26 @@ class _Asset {
     }
     final int index = entryUri.path.indexOf(relativeUri.path);
     return index == -1 ? null : Uri(path: entryUri.path.substring(0, index));
+  }
+
+  bool matchesFlavor(String? flavor) {
+    if (flavors.isEmpty) {
+      return true;
+    }
+
+    if (flavor == null) {
+      return false;
+    }
+
+    return flavors.contains(flavor);
+  }
+
+  bool hasEquivalentFlavorsWith(_Asset other) {
+    final Set<String> assetFlavors = flavors.toSet();
+    final Set<String> otherFlavors = other.flavors.toSet();
+    return assetFlavors.length == otherFlavors.length && assetFlavors.every(
+      (String e) => otherFlavors.contains(e),
+    );
   }
 
   @override
@@ -914,63 +1215,69 @@ class _Asset {
     return other is _Asset
         && other.baseDir == baseDir
         && other.relativeUri == relativeUri
-        && other.entryUri == entryUri;
+        && other.entryUri == entryUri
+        && other.assetKind == assetKind
+        && hasEquivalentFlavorsWith(other);
   }
 
   @override
-  int get hashCode => Object.hash(baseDir, relativeUri, entryUri.hashCode);
+  int get hashCode => Object.hashAll(<Object>[
+    baseDir,
+    relativeUri,
+    entryUri,
+    assetKind,
+    ...flavors,
+  ]);
 }
 
 // Given an assets directory like this:
 //
-// assets/foo
-// assets/var1/foo
-// assets/var2/foo
-// assets/bar
+// assets/foo.png
+// assets/2x/foo.png
+// assets/3.0x/foo.png
+// assets/bar/foo.png
+// assets/bar.png
 //
-// variantsFor('assets/foo') => ['/assets/var1/foo', '/assets/var2/foo']
-// variantsFor('assets/bar') => []
+// variantsFor('assets/foo.png') => ['/assets/foo.png', '/assets/2x/foo.png', 'assets/3.0x/foo.png']
+// variantsFor('assets/bar.png') => ['/assets/bar.png']
+// variantsFor('assets/bar/foo.png') => ['/assets/bar/foo.png']
 class _AssetDirectoryCache {
-  _AssetDirectoryCache(Iterable<String> excluded, this._fileSystem)
-    : _excluded = excluded
-        .map<String>(_fileSystem.path.absolute)
-        .toList();
+  _AssetDirectoryCache(this._fileSystem);
 
   final FileSystem _fileSystem;
-  final List<String> _excluded;
-  final Map<String, Map<String, List<String>>> _cache = <String, Map<String, List<String>>>{};
+  final Map<String, List<String>> _cache = <String, List<String>>{};
+  final Map<String, List<File>> _variantsPerFolder = <String, List<File>>{};
 
   List<String> variantsFor(String assetPath) {
-    final String assetName = _fileSystem.path.basename(assetPath);
     final String directory = _fileSystem.path.dirname(assetPath);
 
     if (!_fileSystem.directory(directory).existsSync()) {
       return const <String>[];
     }
 
-    if (_cache[directory] == null) {
-      final List<String> paths = <String>[];
-      for (final FileSystemEntity entity in _fileSystem.directory(directory).listSync(recursive: true)) {
-        final String path = entity.path;
-        if (_fileSystem.isFileSync(path)
-          && assetPath != path
-          && !_excluded.any((String exclude) => _fileSystem.path.isWithin(exclude, path))) {
-          paths.add(path);
-        }
-      }
-
-      final Map<String, List<String>> variants = <String, List<String>>{};
-      for (final String path in paths) {
-        final String variantName = _fileSystem.path.basename(path);
-        if (directory == _fileSystem.path.dirname(path)) {
-          continue;
-        }
-        variants[variantName] ??= <String>[];
-        variants[variantName]!.add(path);
-      }
-      _cache[directory] = variants;
+    if (_cache.containsKey(assetPath)) {
+      return _cache[assetPath]!;
     }
-
-    return _cache[directory]![assetName] ?? const <String>[];
+    if (!_variantsPerFolder.containsKey(directory)) {
+      _variantsPerFolder[directory] = _fileSystem.directory(directory)
+        .listSync()
+        .whereType<Directory>()
+        .where((Directory dir) => _assetVariantDirectoryRegExp.hasMatch(dir.basename))
+        .expand((Directory dir) => dir.listSync())
+        .whereType<File>()
+        .toList();
+    }
+    final File assetFile = _fileSystem.file(assetPath);
+    final List<File> potentialVariants = _variantsPerFolder[directory]!;
+    final String basename = assetFile.basename;
+    return _cache[assetPath] = <String>[
+      // It's possible that the user specifies only explicit variants (e.g. .../1x/asset.png),
+      // so there does not necessarily need to be a file at the given path.
+      if (assetFile.existsSync())
+        assetPath,
+      ...potentialVariants
+        .where((File file) => file.basename == basename)
+        .map((File file) => file.path),
+    ];
   }
 }

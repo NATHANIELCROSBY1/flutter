@@ -69,6 +69,7 @@ void main() {
       vsync: const TestVSync(),
       length: 3,
     );
+    addTearDown(tabController.dispose);
     await tester.pumpWidget(buildFrame(tabController));
 
     expect(tabController.index, 0);
@@ -90,6 +91,7 @@ void main() {
       vsync: const TestVSync(),
       length: 3,
     );
+    addTearDown(tabController.dispose);
     await tester.pumpWidget(buildFrame(tabController));
 
     expect(tabController.index, 0);
@@ -134,6 +136,7 @@ void main() {
       initialIndex: 1,
       length: 3,
     );
+    addTearDown(tabController.dispose);
     await tester.pumpWidget(buildFrame(tabController));
 
     expect(tabController.index, 1);
@@ -184,7 +187,6 @@ void main() {
     await tester.fling(find.byType(TabBarView), const Offset(100.0, 0.0), 1000.0);
     await tester.pumpAndSettle();
     expect(indicatorColors(tester), const <Color>[kUnselectedColor, kSelectedColor, kUnselectedColor]);
-
   });
 
   testWidgets('PageSelector indicatorColors', (WidgetTester tester) async {
@@ -196,6 +198,7 @@ void main() {
       initialIndex: 1,
       length: 3,
     );
+    addTearDown(tabController.dispose);
     await tester.pumpWidget(buildFrame(tabController, color: kRed, selectedColor: kBlue));
 
     expect(tabController.index, 1);
@@ -212,6 +215,7 @@ void main() {
       initialIndex: 1,
       length: 3,
     );
+    addTearDown(tabController.dispose);
     await tester.pumpWidget(buildFrame(tabController, indicatorSize: 16.0));
 
     final Iterable<Element> indicatorElements = find.descendant(
@@ -220,18 +224,20 @@ void main() {
     ).evaluate();
 
     // Indicators get an 8 pixel margin, 16 + 8 = 24.
-    for (final Element indicatorElement in indicatorElements)
+    for (final Element indicatorElement in indicatorElements) {
       expect(indicatorElement.size, const Size(24.0, 24.0));
+    }
 
     expect(tester.getSize(find.byType(TabPageSelector)).height, 24.0);
   });
 
-    testWidgets('PageSelector circle border', (WidgetTester tester) async {
+  testWidgets('PageSelector circle border', (WidgetTester tester) async {
     final TabController tabController = TabController(
       vsync: const TestVSync(),
       initialIndex: 1,
       length: 3,
     );
+    addTearDown(tabController.dispose);
 
     Iterable<TabPageSelectorIndicator> indicators;
 
@@ -243,8 +249,9 @@ void main() {
         matching: find.byType(TabPageSelectorIndicator),
       ),
     );
-    for (final TabPageSelectorIndicator indicator in indicators)
+    for (final TabPageSelectorIndicator indicator in indicators) {
       expect(indicator.borderStyle, BorderStyle.solid);
+    }
 
     // No border
     await tester.pumpWidget(buildFrame(tabController, borderStyle: BorderStyle.none));
@@ -254,8 +261,9 @@ void main() {
         matching: find.byType(TabPageSelectorIndicator),
       ),
     );
-    for (final TabPageSelectorIndicator indicator in indicators)
+    for (final TabPageSelectorIndicator indicator in indicators) {
       expect(indicator.borderStyle, BorderStyle.none);
+    }
 
     // Solid border
     await tester.pumpWidget(buildFrame(tabController, borderStyle: BorderStyle.solid));
@@ -265,7 +273,8 @@ void main() {
         matching: find.byType(TabPageSelectorIndicator),
       ),
     );
-    for (final TabPageSelectorIndicator indicator in indicators)
+    for (final TabPageSelectorIndicator indicator in indicators) {
       expect(indicator.borderStyle, BorderStyle.solid);
+    }
   });
 }

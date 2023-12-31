@@ -46,10 +46,10 @@ class SynonymKeyInfo {
   String get constantName => upperCamelToLowerCamel(name);
 }
 
-/// Generates the keyboard_key.dart based on the information in the key data
+/// Generates the keyboard_key.g.dart based on the information in the key data
 /// structure given to it.
 class KeyboardKeysCodeGenerator extends BaseCodeGenerator {
-  KeyboardKeysCodeGenerator(PhysicalKeyData keyData, LogicalKeyData logicalData) : super(keyData, logicalData);
+  KeyboardKeysCodeGenerator(super.keyData, super.logicalData);
 
   /// Gets the generated definitions of PhysicalKeyboardKeys.
   String get _physicalDefinitions {
@@ -78,7 +78,7 @@ $otherComments  static const PhysicalKeyboardKey ${entry.constantName} = Physica
 
   /// Gets the generated definitions of LogicalKeyboardKeys.
   String get _logicalDefinitions {
-    final OutputLines<int> lines = OutputLines<int>('Logical debug names');
+    final OutputLines<int> lines = OutputLines<int>('Logical debug names', behavior: DeduplicateBehavior.kSkip);
     void printKey(int flutterId, String constantName, String commentName, {String? otherComments}) {
       final String firstComment = _wrapString('Represents the logical "$commentName" key on the keyboard.');
       otherComments ??= _wrapString('See the function [RawKeyEvent.logicalKey] for more information.');
@@ -115,14 +115,24 @@ $otherComments  static const LogicalKeyboardKey $constantName = LogicalKeyboardK
     for (final SynonymKeyInfo synonymInfo in synonyms.values) {
       for (final LogicalKeyEntry key in synonymInfo.keys) {
         final LogicalKeyEntry synonym = logicalData.entryByName(synonymInfo.name);
-        result.writeln('    ${key.constantName}: ${synonym.constantName},');
+        result.writeln('    ${key.constantName}: <LogicalKeyboardKey>{${synonym.constantName}},');
       }
     }
     return result.toString();
   }
 
+  String get _logicalReverseSynonyms {
+    final StringBuffer result = StringBuffer();
+    for (final SynonymKeyInfo synonymInfo in synonyms.values) {
+      final LogicalKeyEntry synonym = logicalData.entryByName(synonymInfo.name);
+      final List<String> entries = synonymInfo.keys.map<String>((LogicalKeyEntry entry) => entry.constantName).toList();
+      result.writeln('    ${synonym.constantName}: <LogicalKeyboardKey>{${entries.join(', ')}},');
+    }
+    return result.toString();
+  }
+
   String get _logicalKeyLabels {
-    final OutputLines<int> lines = OutputLines<int>('Logical key labels');
+    final OutputLines<int> lines = OutputLines<int>('Logical key labels', behavior: DeduplicateBehavior.kSkip);
     for (final LogicalKeyEntry entry in logicalData.entries) {
       lines.add(entry.value, '''
     ${toHex(entry.value, digits: 11)}: '${entry.commentName}',''');
@@ -141,7 +151,7 @@ $otherComments  static const LogicalKeyboardKey $constantName = LogicalKeyboardK
 
   /// This generates the map of Flutter key codes to logical keys.
   String get _predefinedKeyCodeMap {
-    final OutputLines<int> lines = OutputLines<int>('Logical key map');
+    final OutputLines<int> lines = OutputLines<int>('Logical key map', behavior: DeduplicateBehavior.kSkip);
     for (final LogicalKeyEntry entry in logicalData.entries) {
       lines.add(entry.value, '    ${toHex(entry.value, digits: 11)}: ${entry.constantName},');
     }
@@ -149,7 +159,7 @@ $otherComments  static const LogicalKeyboardKey $constantName = LogicalKeyboardK
   }
 
   String get _maskConstantVariables {
-    final OutputLines<int> lines = OutputLines<int>('Mask constants', checkDuplicate: false);
+    final OutputLines<int> lines = OutputLines<int>('Mask constants', behavior: DeduplicateBehavior.kKeep);
     for (final MaskConstant constant in _maskConstants) {
       lines.add(constant.value, '''
 ${_wrapString(constant.description)}  ///
@@ -169,6 +179,7 @@ ${_wrapString(constant.description)}  ///
       'LOGICAL_KEY_MAP': _predefinedKeyCodeMap,
       'LOGICAL_KEY_DEFINITIONS': _logicalDefinitions,
       'LOGICAL_KEY_SYNONYMS': _logicalSynonyms,
+      'LOGICAL_KEY_REVERSE_SYNONYMS': _logicalReverseSynonyms,
       'LOGICAL_KEY_KEY_LABELS': _logicalKeyLabels,
       'PHYSICAL_KEY_MAP': _predefinedHidCodeMap,
       'PHYSICAL_KEY_DEFINITIONS': _physicalDefinitions,

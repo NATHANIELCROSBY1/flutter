@@ -6,7 +6,10 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+
+export 'dart:ui' show Offset;
 
 /// An abstract class providing an interface for evaluating a parametric curve.
 ///
@@ -33,7 +36,6 @@ abstract class ParametricCurve<T> {
   /// implementation of [transform], which delegates the remaining logic to
   /// [transformInternal].
   T transform(double t) {
-    assert(t != null);
     assert(t >= 0.0 && t <= 1.0, 'parametric value $t is outside of [0, 1] range.');
     return transformInternal(t);
   }
@@ -125,9 +127,7 @@ class _Linear extends Curve {
 /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_sawtooth.mp4}
 class SawTooth extends Curve {
   /// Creates a sawtooth curve.
-  ///
-  /// The [count] argument must not be null.
-  const SawTooth(this.count) : assert(count != null);
+  const SawTooth(this.count);
 
   /// The number of repetitions of the sawtooth pattern in the unit interval.
   final int count;
@@ -155,21 +155,16 @@ class SawTooth extends Curve {
 /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_interval.mp4}
 class Interval extends Curve {
   /// Creates an interval curve.
-  ///
-  /// The arguments must not be null.
-  const Interval(this.begin, this.end, { this.curve = Curves.linear })
-    : assert(begin != null),
-      assert(end != null),
-      assert(curve != null);
+  const Interval(this.begin, this.end, { this.curve = Curves.linear });
 
   /// The largest value for which this interval is 0.0.
   ///
-  /// From t=0.0 to t=`begin`, the interval's value is 0.0.
+  /// From t=0.0 to t=[begin], the interval's value is 0.0.
   final double begin;
 
   /// The smallest value for which this interval is 1.0.
   ///
-  /// From t=`end` to t=1.0, the interval's value is 1.0.
+  /// From t=[end] to t=1.0, the interval's value is 1.0.
   final double end;
 
   /// The curve to apply between [begin] and [end].
@@ -182,16 +177,18 @@ class Interval extends Curve {
     assert(end >= 0.0);
     assert(end <= 1.0);
     assert(end >= begin);
-    t = ((t - begin) / (end - begin)).clamp(0.0, 1.0);
-    if (t == 0.0 || t == 1.0)
+    t = clampDouble((t - begin) / (end - begin), 0.0, 1.0);
+    if (t == 0.0 || t == 1.0) {
       return t;
+    }
     return curve.transform(t);
   }
 
   @override
   String toString() {
-    if (curve is! _Linear)
+    if (curve is! _Linear) {
       return '${objectRuntimeType(this, 'Interval')}($begin\u22EF$end)\u27A9$curve';
+    }
     return '${objectRuntimeType(this, 'Interval')}($begin\u22EF$end)';
   }
 }
@@ -201,9 +198,7 @@ class Interval extends Curve {
 /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_threshold.mp4}
 class Threshold extends Curve {
   /// Creates a threshold curve.
-  ///
-  /// The [threshold] argument must not be null.
-  const Threshold(this.threshold) : assert(threshold != null);
+  const Threshold(this.threshold);
 
   /// The value before which the curve is 0.0 and after which the curve is 1.0.
   ///
@@ -301,13 +296,7 @@ class Cubic extends Curve {
   ///
   /// Rather than creating a new instance, consider using one of the common
   /// cubic curves in [Curves].
-  ///
-  /// The [a] (x1), [b](x2), [c](y1), and [d](y2) arguments must not be null.
-  const Cubic(this.a, this.b, this.c, this.d)
-    : assert(a != null),
-      assert(b != null),
-      assert(c != null),
-      assert(d != null);
+  const Cubic(this.a, this.b, this.c, this.d);
 
   /// The x coordinate of the first control point.
   ///
@@ -348,12 +337,14 @@ class Cubic extends Curve {
     while (true) {
       final double midpoint = (start + end) / 2;
       final double estimate = _evaluateCubic(a, c, midpoint);
-      if ((t - estimate).abs() < _cubicErrorBound)
+      if ((t - estimate).abs() < _cubicErrorBound) {
         return _evaluateCubic(b, d, midpoint);
-      if (estimate < t)
+      }
+      if (estimate < t) {
         start = midpoint;
-      else
+      } else {
         end = midpoint;
+      }
     }
   }
 
@@ -502,7 +493,7 @@ abstract class Curve2D extends ParametricCurve<Offset> {
     double end = 1.0,
     double tolerance = 1e-10,
   }) {
-    // The sampling  algorithm is:
+    // The sampling algorithm is:
     // 1. Evaluate the area of the triangle (a proxy for the "flatness" of the
     //    curve) formed by two points and a test point.
     // 2. If the area of the triangle is small enough (below tolerance), then
@@ -512,9 +503,6 @@ abstract class Curve2D extends ParametricCurve<Offset> {
     // 4. Recursively sample the two parts.
     //
     // This algorithm concentrates samples in areas of high curvature.
-    assert(tolerance != null);
-    assert(start != null);
-    assert(end != null);
     assert(end > start);
     // We want to pick a random seed that will keep the result stable if
     // evaluated again, so we use the first non-generated control point.
@@ -571,7 +559,6 @@ abstract class Curve2D extends ParametricCurve<Offset> {
   /// single-valued, it will return the parameter for only one of the values at
   /// the given `x` location.
   double findInverse(double x) {
-    assert(x != null);
     double start = 0.0;
     double end = 1.0;
     late double mid;
@@ -604,9 +591,7 @@ abstract class Curve2D extends ParametricCurve<Offset> {
 ///  * [Curve2D], a parametric curve that maps a double parameter to a 2D location.
 class Curve2DSample {
   /// Creates an object that holds a sample; used with [Curve2D] subclasses.
-  ///
-  /// All arguments must not be null.
-  const Curve2DSample(this.t, this.value) : assert(t != null), assert(value != null);
+  const Curve2DSample(this.t, this.value);
 
   /// The parametric location of this sample point along the curve.
   final double t;
@@ -664,21 +649,18 @@ class CatmullRomSpline extends Curve2D {
   /// control point. The default is chosen so that the slope of the line at the
   /// ends matches that of the first or last line segment in the control points.
   ///
-  /// The `tension` and `controlPoints` arguments must not be null, and the
-  /// `controlPoints` list must contain at least four control points to
+  /// The `controlPoints` list must contain at least four control points to
   /// interpolate.
   ///
   /// The internal curve data structures are lazily computed the first time
-  /// [transform] is called.  If you would rather pre-compute the structures,
+  /// [transform] is called. If you would rather pre-compute the structures,
   /// use [CatmullRomSpline.precompute] instead.
   CatmullRomSpline(
       List<Offset> controlPoints, {
         double tension = 0.0,
         Offset? startHandle,
         Offset? endHandle,
-      }) : assert(controlPoints != null),
-           assert(tension != null),
-           assert(tension <= 1.0, 'tension $tension must not be greater than 1.0.'),
+      }) : assert(tension <= 1.0, 'tension $tension must not be greater than 1.0.'),
            assert(tension >= 0.0, 'tension $tension must not be negative.'),
            assert(controlPoints.length > 3, 'There must be at least four control points to create a CatmullRomSpline.'),
            _controlPoints = controlPoints,
@@ -689,16 +671,14 @@ class CatmullRomSpline extends Curve2D {
 
   /// Constructs a centripetal Catmull-Rom spline curve.
   ///
-  /// The same as [new CatmullRomSpline], except that the internal data
+  /// The same as [CatmullRomSpline.new], except that the internal data
   /// structures are precomputed instead of being computed lazily.
   CatmullRomSpline.precompute(
       List<Offset> controlPoints, {
         double tension = 0.0,
         Offset? startHandle,
         Offset? endHandle,
-      }) : assert(controlPoints != null),
-           assert(tension != null),
-           assert(tension <= 1.0, 'tension $tension must not be greater than 1.0.'),
+      }) : assert(tension <= 1.0, 'tension $tension must not be greater than 1.0.'),
            assert(tension >= 0.0, 'tension $tension must not be negative.'),
            assert(controlPoints.length > 3, 'There must be at least four control points to create a CatmullRomSpline.'),
            _controlPoints = null,
@@ -714,6 +694,27 @@ class CatmullRomSpline extends Curve2D {
     Offset? startHandle,
     Offset? endHandle,
   }) {
+    assert(
+      startHandle == null || startHandle.isFinite,
+      'The provided startHandle of CatmullRomSpline must be finite. The '
+      'startHandle given was $startHandle.'
+    );
+    assert(
+      endHandle == null || endHandle.isFinite,
+      'The provided endHandle of CatmullRomSpline must be finite. The endHandle '
+      'given was $endHandle.'
+    );
+    assert(() {
+      for (int index = 0; index < controlPoints.length; index++) {
+        if (!controlPoints[index].isFinite) {
+          throw FlutterError(
+            'The provided CatmullRomSpline control point at index $index is not '
+            'finite. The control point given was ${controlPoints[index]}.'
+          );
+        }
+      }
+      return true;
+    }());
     // If not specified, select the first and last control points (which are
     // handles: they are not intersected by the resulting curve) so that they
     // extend the first and last segments, respectively.
@@ -826,7 +827,7 @@ class CatmullRomSpline extends Curve2D {
 ///
 ///  * [CatmullRomSpline], the 2D spline that this curve uses to generate its values.
 ///  * A Wikipedia article on [centripetal Catmull-Rom splines](https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline).
-///  * [new CatmullRomCurve] for a description of the constraints put on the
+///  * [CatmullRomCurve.new] for a description of the constraints put on the
 ///    input control points.
 ///  * This [paper on using Catmull-Rom splines](http://faculty.cs.tamu.edu/schaefer/research/cr_cad.pdf).
 class CatmullRomCurve extends Curve {
@@ -845,17 +846,14 @@ class CatmullRomCurve extends Curve {
   /// is equivalent to a linear interpolation between points.
   ///
   /// The internal curve data structures are lazily computed the first time
-  /// [transform] is called.  If you would rather pre-compute the curve, use
+  /// [transform] is called. If you would rather pre-compute the curve, use
   /// [CatmullRomCurve.precompute] instead.
-  ///
-  /// All of the arguments must not be null.
   ///
   /// See also:
   ///
   ///  * This [paper on using Catmull-Rom splines](http://faculty.cs.tamu.edu/schaefer/research/cr_cad.pdf).
   CatmullRomCurve(this.controlPoints, {this.tension = 0.0})
-      : assert(tension != null),
-        assert(() {
+      : assert(() {
           return validateControlPoints(
             controlPoints,
             tension: tension,
@@ -868,11 +866,10 @@ class CatmullRomCurve extends Curve {
 
   /// Constructs a centripetal [CatmullRomCurve].
   ///
-  /// Same as [new CatmullRomCurve], but it precomputes the internal curve data
+  /// Same as [CatmullRomCurve.new], but it precomputes the internal curve data
   /// structures for a more predictable computation load.
   CatmullRomCurve.precompute(this.controlPoints, {this.tension = 0.0})
-      : assert(tension != null),
-        assert(() {
+      : assert(() {
           return validateControlPoints(
             controlPoints,
             tension: tension,
@@ -932,7 +929,7 @@ class CatmullRomCurve extends Curve {
 
   /// The "tension" of the curve.
   ///
-  /// The `tension` attribute controls how tightly the curve approaches the
+  /// The [tension] attribute controls how tightly the curve approaches the
   /// given [controlPoints]. It must be in the range 0.0 to 1.0, inclusive. It
   /// is optional, and defaults to 0.0, which provides the smoothest curve. A
   /// value of 1.0 is equivalent to a linear interpolation between control
@@ -943,7 +940,7 @@ class CatmullRomCurve extends Curve {
   /// well-formed and will not produce a spline that self-intersects.
   ///
   /// This method is also used in debug mode to validate a curve to make sure
-  /// that it won't violate the contract for the [new CatmullRomCurve]
+  /// that it won't violate the contract for the [CatmullRomCurve.new]
   /// constructor.
   ///
   /// If in debug mode, and `reasons` is non-null, this function will fill in
@@ -957,7 +954,6 @@ class CatmullRomCurve extends Curve {
     double tension = 0.0,
     List<String>? reasons,
   }) {
-    assert(tension != null);
     if (controlPoints == null) {
       assert(() {
         reasons?.add('Supplied control points cannot be null');
@@ -1135,9 +1131,7 @@ class CatmullRomCurve extends Curve {
 ///  * [CurvedAnimation], which can take a separate curve and reverse curve.
 class FlippedCurve extends Curve {
   /// Creates a flipped curve.
-  ///
-  /// The [curve] argument must not be null.
-  const FlippedCurve(this.curve) : assert(curve != null);
+  const FlippedCurve(this.curve);
 
   /// The curve that is being flipped.
   final Curve curve;
@@ -1219,10 +1213,11 @@ class _BounceInOutCurve extends Curve {
 
   @override
   double transformInternal(double t) {
-    if (t < 0.5)
+    if (t < 0.5) {
       return (1.0 - _bounce(1.0 - t * 2.0)) * 0.5;
-    else
+    } else {
       return _bounce(t * 2.0 - 1.0) * 0.5 + 0.5;
+    }
   }
 }
 
@@ -1304,10 +1299,11 @@ class ElasticInOutCurve extends Curve {
   double transformInternal(double t) {
     final double s = period / 4.0;
     t = 2.0 * t - 1.0;
-    if (t < 0.0)
+    if (t < 0.0) {
       return -0.5 * math.pow(2.0, 10.0 * t) * math.sin((t - s) * (math.pi * 2.0) / period);
-    else
+    } else {
       return math.pow(2.0, -10.0 * t) * math.sin((t - s) * (math.pi * 2.0) / period) * 0.5 + 1.0;
+    }
   }
 
   @override
@@ -1364,11 +1360,8 @@ class ElasticInOutCurve extends Curve {
 ///
 ///  * [Curve], the interface implemented by the constants available from the
 ///    [Curves] class.
-class Curves {
-  // This class is not meant to be instantiated or extended; this constructor
-  // prevents instantiation and extension.
-  Curves._();
-
+///  * [Easing], for the Material animation curves.
+abstract final class Curves {
   /// A linear animation curve.
   ///
   /// This is the identity map over the unit interval: its [Curve.transform]
@@ -1396,12 +1389,36 @@ class Curves {
   /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_fast_linear_to_slow_ease_in.mp4}
   static const Cubic fastLinearToSlowEaseIn = Cubic(0.18, 1.0, 0.04, 1.0);
 
+  /// A curve that starts slowly, speeds up very quickly, and then ends slowly.
+  ///
+  /// This curve is used by default to animate page transitions used by
+  /// [CupertinoPageRoute].
+  ///
+  /// It has been derived from plots of native iOS 16.3
+  /// animation frames on iPhone 14 Pro Max.
+  /// Specifically, transition animation positions were measured
+  /// every frame and plotted against time. Then, a cubic curve was
+  /// strictly fit to the measured data points.
+  ///
+  /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_fast_ease_in_to_slow_ease_out.mp4}
+  static const ThreePointCubic fastEaseInToSlowEaseOut = ThreePointCubic(
+    Offset(0.056, 0.024),
+    Offset(0.108, 0.3085),
+    Offset(0.198, 0.541),
+    Offset(0.3655, 1.0),
+    Offset(0.5465, 0.989),
+  );
+
   /// A cubic animation curve that speeds up quickly and ends slowly.
+  ///
+  /// This is the same as the CSS easing function `ease`.
   ///
   /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_ease.mp4}
   static const Cubic ease = Cubic(0.25, 0.1, 0.25, 1.0);
 
   /// A cubic animation curve that starts slowly and ends quickly.
+  ///
+  /// This is the same as the CSS easing function `ease-in`.
   ///
   /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_ease_in.mp4}
   static const Cubic easeIn = Cubic(0.42, 0.0, 1.0, 1.0);
@@ -1504,6 +1521,8 @@ class Curves {
 
   /// A cubic animation curve that starts quickly and ends slowly.
   ///
+  /// This is the same as the CSS easing function `ease-out`.
+  ///
   /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_ease_out.mp4}
   static const Cubic easeOut = Cubic(0.0, 0.0, 0.58, 1.0);
 
@@ -1604,6 +1623,8 @@ class Curves {
 
   /// A cubic animation curve that starts slowly, speeds up, and then ends
   /// slowly.
+  ///
+  /// This is the same as the CSS easing function `ease-in-out`.
   ///
   /// {@animation 464 192 https://flutter.github.io/assets-for-api-docs/assets/animation/curve_ease_in_out.mp4}
   static const Cubic easeInOut = Cubic(0.42, 0.0, 0.58, 1.0);
@@ -1735,7 +1756,7 @@ class Curves {
   ///
   /// See also:
   ///
-  ///  * [standardEasing], the name for this curve in the Material specification.
+  ///  * [Easing.legacy], the name for this curve in the Material specification.
   static const Cubic fastOutSlowIn = Cubic(0.4, 0.0, 0.2, 1.0);
 
   /// A cubic animation curve that starts quickly, slows down, and then ends

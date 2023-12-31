@@ -13,7 +13,7 @@ void main() {
 }
 
 class DemoButton extends StatefulWidget {
-  const DemoButton({Key? key, required this.name, this.canRequestFocus = true, this.autofocus = false}) : super(key: key);
+  const DemoButton({super.key, required this.name, this.canRequestFocus = true, this.autofocus = false});
 
   final String name;
   final bool canRequestFocus;
@@ -54,10 +54,12 @@ class _DemoButtonState extends State<DemoButton> {
       autofocus: widget.autofocus,
       style: ButtonStyle(
         overlayColor: MaterialStateProperty.resolveWith<Color>((Set<MaterialState> states) {
-          if (states.contains(MaterialState.focused))
+          if (states.contains(MaterialState.focused)) {
             return Colors.red.withOpacity(0.25);
-          if (states.contains(MaterialState.hovered))
+          }
+          if (states.contains(MaterialState.hovered)) {
             return Colors.blue.withOpacity(0.25);
+          }
           return Colors.transparent;
         }),
       ),
@@ -68,7 +70,7 @@ class _DemoButtonState extends State<DemoButton> {
 }
 
 class FocusDemo extends StatefulWidget {
-  const FocusDemo({Key? key}) : super(key: key);
+  const FocusDemo({super.key});
 
   @override
   State<FocusDemo> createState() => _FocusDemoState();
@@ -89,13 +91,14 @@ class _FocusDemoState extends State<FocusDemo> {
     super.dispose();
   }
 
-  KeyEventResult _handleKeyPress(FocusNode node, RawKeyEvent event) {
-    if (event is RawKeyDownEvent) {
+  KeyEventResult _handleKeyPress(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
       print('Scope got key event: ${event.logicalKey}, $node');
-      print('Keys down: ${RawKeyboard.instance.keysPressed}');
+      print('Keys down: ${HardwareKeyboard.instance.logicalKeysPressed}');
       if (event.logicalKey == LogicalKeyboardKey.tab) {
         debugDumpFocusTree();
-        if (event.isShiftPressed) {
+        if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft)
+            || HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight)) {
           print('Moving to previous.');
           node.previousFocus();
           return KeyEventResult.handled;
@@ -133,10 +136,10 @@ class _FocusDemoState extends State<FocusDemo> {
       policy: ReadingOrderTraversalPolicy(),
       child: FocusScope(
         debugLabel: 'Scope',
-        onKey: _handleKeyPress,
+        onKeyEvent: _handleKeyPress,
         autofocus: true,
         child: DefaultTextStyle(
-          style: textTheme.headline4!,
+          style: textTheme.headlineMedium!,
           child: Scaffold(
             appBar: AppBar(
               title: const Text('Focus Demo'),
@@ -150,18 +153,18 @@ class _FocusDemoState extends State<FocusDemo> {
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
-                    Row(
+                    const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const <Widget>[
+                      children: <Widget>[
                         DemoButton(
                           name: 'One',
                           autofocus: true,
                         ),
                       ],
                     ),
-                    Row(
+                    const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const <Widget>[
+                      children: <Widget>[
                         DemoButton(name: 'Two'),
                         DemoButton(
                           name: 'Three',
@@ -169,9 +172,9 @@ class _FocusDemoState extends State<FocusDemo> {
                         ),
                       ],
                     ),
-                    Row(
+                    const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const <Widget>[
+                      children: <Widget>[
                         DemoButton(name: 'Four'),
                         DemoButton(name: 'Five'),
                         DemoButton(name: 'Six'),

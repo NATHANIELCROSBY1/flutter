@@ -10,7 +10,7 @@ import 'package:meta/meta.dart';
 import '../convert.dart';
 import 'common.dart';
 import 'io.dart';
-import 'terminal.dart' show Terminal, TerminalColor, OutputPreferences;
+import 'terminal.dart' show OutputPreferences, Terminal, TerminalColor;
 import 'utils.dart';
 
 const int kDefaultStatusPadding = 59;
@@ -36,7 +36,7 @@ abstract class Logger {
   /// If true, silences the logger output.
   bool quiet = false;
 
-  /// If true, this logger supports color output.
+  /// If true, this logger supports ANSI sequences and animations are enabled.
   bool get supportsColor;
 
   /// If true, this logger is connected to a terminal.
@@ -46,7 +46,8 @@ abstract class Logger {
   /// since the last time it was set to false.
   bool hadErrorOutput = false;
 
-  /// If true, then [printWarning] has been called at least once for this logger
+  /// If true, then [printWarning] has been called at least once with its
+  /// "fatal" argument true for this logger
   /// since the last time it was reset to false.
   bool hadWarningOutput = false;
 
@@ -124,6 +125,7 @@ abstract class Logger {
     int? indent,
     int? hangingIndent,
     bool? wrap,
+    bool fatal = true,
   });
 
   /// Display normal output of the command. This should be used for things like
@@ -212,7 +214,12 @@ abstract class Logger {
 
   /// A [SilentStatus] or an [AnonymousSpinnerStatus] (depending on whether the
   /// terminal is fancy enough), already started.
-  Status startSpinner({ VoidCallback? onFinish });
+  Status startSpinner({
+    VoidCallback? onFinish,
+    Duration? timeout,
+    SlowWarningCallback? slowWarningCallback,
+    TerminalColor? warningColor,
+  });
 
   /// Send an event to be emitted.
   ///
@@ -309,6 +316,7 @@ class DelegatingLogger implements Logger {
     int? indent,
     int? hangingIndent,
     bool? wrap,
+    bool fatal = true,
   }) {
     _delegate.printWarning(
       message,
@@ -317,6 +325,7 @@ class DelegatingLogger implements Logger {
       indent: indent,
       hangingIndent: hangingIndent,
       wrap: wrap,
+      fatal: fatal,
     );
   }
 
@@ -368,8 +377,18 @@ class DelegatingLogger implements Logger {
   }
 
   @override
-  Status startSpinner({VoidCallback? onFinish}) {
-    return _delegate.startSpinner(onFinish: onFinish);
+  Status startSpinner({
+    VoidCallback? onFinish,
+    Duration? timeout,
+    SlowWarningCallback? slowWarningCallback,
+    TerminalColor? warningColor,
+  }) {
+    return _delegate.startSpinner(
+      onFinish: onFinish,
+      timeout: timeout,
+      slowWarningCallback: slowWarningCallback,
+      warningColor: warningColor,
+    );
   }
 
   @override
@@ -424,7 +443,7 @@ class StdoutLogger extends Logger {
   bool get isVerbose => false;
 
   @override
-  bool get supportsColor => terminal.supportsColor;
+  bool get supportsColor => terminal.supportsColor && terminal.isCliAnimationEnabled;
 
   @override
   bool get hasTerminal => _stdio.stdinHasTerminal;
@@ -447,7 +466,7 @@ class StdoutLogger extends Logger {
       shouldWrap: wrap ?? _outputPreferences.wrapText,
       columnWidth: _outputPreferences.wrapColumn,
     );
-    if (emphasis == true) {
+    if (emphasis ?? false) {
       message = terminal.bolden(message);
     }
     message = terminal.color(message, color ?? TerminalColor.red);
@@ -466,8 +485,9 @@ class StdoutLogger extends Logger {
     int? indent,
     int? hangingIndent,
     bool? wrap,
+    bool fatal = true,
   }) {
-    hadWarningOutput = true;
+    hadWarningOutput = hadWarningOutput || fatal;
     _status?.pause();
     message = wrapText(message,
       indent: indent,
@@ -475,7 +495,7 @@ class StdoutLogger extends Logger {
       shouldWrap: wrap ?? _outputPreferences.wrapText,
       columnWidth: _outputPreferences.wrapColumn,
     );
-    if (emphasis == true) {
+    if (emphasis ?? false) {
       message = terminal.bolden(message);
     }
     message = terminal.color(message, color ?? TerminalColor.cyan);
@@ -500,13 +520,13 @@ class StdoutLogger extends Logger {
       shouldWrap: wrap ?? _outputPreferences.wrapText,
       columnWidth: _outputPreferences.wrapColumn,
     );
-    if (emphasis == true) {
+    if (emphasis ?? false) {
       message = terminal.bolden(message);
     }
     if (color != null) {
       message = terminal.color(message, color);
     }
-    if (newline != false) {
+    if (newline ?? true) {
       message = '$message\n';
     }
     writeToStdOut(message);
@@ -571,7 +591,12 @@ class StdoutLogger extends Logger {
   }
 
   @override
-  Status startSpinner({ VoidCallback? onFinish }) {
+  Status startSpinner({
+    VoidCallback? onFinish,
+    Duration? timeout,
+    SlowWarningCallback? slowWarningCallback,
+    TerminalColor? warningColor,
+  }) {
     if (_status != null || !supportsColor) {
       return SilentStatus(
         onFinish: onFinish,
@@ -588,6 +613,9 @@ class StdoutLogger extends Logger {
       stdio: _stdio,
       stopwatch: _stopwatchFactory.createStopwatch(),
       terminal: terminal,
+      timeout: timeout,
+      slowWarningCallback: slowWarningCallback,
+      warningColor: warningColor,
     )..start();
     return _status!;
   }
@@ -607,7 +635,7 @@ class StdoutLogger extends Logger {
   }
 }
 
-typedef _Writter = void Function(String message);
+typedef _Writer = void Function(String message);
 
 /// Wraps the message in a box, and writes the bytes by calling [write].
 ///
@@ -625,7 +653,7 @@ typedef _Writter = void Function(String message);
 void _generateBox({
   required String message,
   required int wrapColumn,
-  required _Writter write,
+  required _Writer write,
   required Terminal terminal,
   String? title,
 }) {
@@ -688,16 +716,11 @@ int _getColumnSize(String line) {
 /// they will show up as the unrepresentable character symbol '�'.
 class WindowsStdoutLogger extends StdoutLogger {
   WindowsStdoutLogger({
-    required Terminal terminal,
-    required Stdio stdio,
-    required OutputPreferences outputPreferences,
-    StopwatchFactory stopwatchFactory = const StopwatchFactory(),
-  }) : super(
-      terminal: terminal,
-      stdio: stdio,
-      outputPreferences: outputPreferences,
-      stopwatchFactory: stopwatchFactory,
-    );
+    required super.terminal,
+    required super.stdio,
+    required super.outputPreferences,
+    super.stopwatchFactory,
+  });
 
   @override
   void writeToStdOut(String message) {
@@ -709,6 +732,7 @@ class WindowsStdoutLogger extends StdoutLogger {
                .replaceAll('✓', '√')
                .replaceAll('🔨', '')
                .replaceAll('💪', '')
+               .replaceAll('⚠️', '!')
                .replaceAll('✏️', '');
     _stdio.stdoutWrite(windowsMessage);
   }
@@ -719,16 +743,20 @@ class BufferLogger extends Logger {
     required this.terminal,
     required OutputPreferences outputPreferences,
     StopwatchFactory stopwatchFactory = const StopwatchFactory(),
+    bool verbose = false,
   }) : _outputPreferences = outputPreferences,
-       _stopwatchFactory = stopwatchFactory;
+       _stopwatchFactory = stopwatchFactory,
+       _verbose = verbose;
 
   /// Create a [BufferLogger] with test preferences.
   BufferLogger.test({
     Terminal? terminal,
     OutputPreferences? outputPreferences,
+    bool verbose = false,
   }) : terminal = terminal ?? Terminal.test(),
        _outputPreferences = outputPreferences ?? OutputPreferences.test(),
-       _stopwatchFactory = const StopwatchFactory();
+       _stopwatchFactory = const StopwatchFactory(),
+       _verbose = verbose;
 
   @override
   final OutputPreferences _outputPreferences;
@@ -738,11 +766,13 @@ class BufferLogger extends Logger {
 
   final StopwatchFactory _stopwatchFactory;
 
-  @override
-  bool get isVerbose => false;
+  final bool _verbose;
 
   @override
-  bool get supportsColor => terminal.supportsColor;
+  bool get isVerbose => _verbose;
+
+  @override
+  bool get supportsColor => terminal.supportsColor && terminal.isCliAnimationEnabled;
 
   final StringBuffer _error = StringBuffer();
   final StringBuffer _warning = StringBuffer();
@@ -770,8 +800,14 @@ class BufferLogger extends Logger {
     bool? wrap,
   }) {
     hadErrorOutput = true;
+    final StringBuffer errorMessage = StringBuffer();
+    errorMessage.write(message);
+    if (stackTrace != null) {
+      errorMessage.writeln();
+      errorMessage.write(stackTrace);
+    }
     _error.writeln(terminal.color(
-      wrapText(message,
+      wrapText(errorMessage.toString(),
         indent: indent,
         hangingIndent: hangingIndent,
         shouldWrap: wrap ?? _outputPreferences.wrapText,
@@ -789,8 +825,9 @@ class BufferLogger extends Logger {
     int? indent,
     int? hangingIndent,
     bool? wrap,
+    bool fatal = true,
   }) {
-    hadWarningOutput = true;
+    hadWarningOutput = hadWarningOutput || fatal;
     _warning.writeln(terminal.color(
       wrapText(message,
         indent: indent,
@@ -812,7 +849,7 @@ class BufferLogger extends Logger {
     int? hangingIndent,
     bool? wrap,
   }) {
-    if (newline != false) {
+    if (newline ?? true) {
       _status.writeln(wrapText(message,
         indent: indent,
         hangingIndent: hangingIndent,
@@ -851,7 +888,6 @@ class BufferLogger extends Logger {
     String? progressId,
     int progressIndicatorPadding = kDefaultStatusPadding,
   }) {
-    assert(progressIndicatorPadding != null);
     printStatus(message);
     return SilentStatus(
       stopwatch: _stopwatchFactory.createStopwatch(),
@@ -859,7 +895,12 @@ class BufferLogger extends Logger {
   }
 
   @override
-  Status startSpinner({VoidCallback? onFinish}) {
+  Status startSpinner({
+    VoidCallback? onFinish,
+    Duration? timeout,
+    SlowWarningCallback? slowWarningCallback,
+    TerminalColor? warningColor,
+  }) {
     return SilentStatus(
       stopwatch: _stopwatchFactory.createStopwatch(),
       onFinish: onFinish,
@@ -878,17 +919,16 @@ class BufferLogger extends Logger {
   void sendEvent(String name, [Map<String, dynamic>? args]) {
     _events.write(json.encode(<String, Object?>{
       'name': name,
-      'args': args
+      'args': args,
     }));
   }
 }
 
 class VerboseLogger extends DelegatingLogger {
-  VerboseLogger(Logger parent, {
+  VerboseLogger(super.parent, {
     StopwatchFactory stopwatchFactory = const StopwatchFactory()
   }) : _stopwatch = stopwatchFactory.createStopwatch(),
-       _stopwatchFactory = stopwatchFactory,
-       super(parent) {
+       _stopwatchFactory = stopwatchFactory {
     _stopwatch.start();
   }
 
@@ -931,6 +971,7 @@ class VerboseLogger extends DelegatingLogger {
         int? indent,
         int? hangingIndent,
         bool? wrap,
+        bool fatal = true,
       }) {
     hadWarningOutput = true;
     _emit(
@@ -991,7 +1032,6 @@ class VerboseLogger extends DelegatingLogger {
     String? progressId,
     int progressIndicatorPadding = kDefaultStatusPadding,
   }) {
-    assert(progressIndicatorPadding != null);
     printStatus(message);
     final Stopwatch timer = _stopwatchFactory.createStopwatch()..start();
     return SilentStatus(
@@ -1038,19 +1078,15 @@ class VerboseLogger extends DelegatingLogger {
         if (stackTrace != null) {
           super.printError(indent + stackTrace.toString().replaceAll('\n', '\n$indent'));
         }
-        break;
       case _LogType.warning:
         super.printWarning(prefix + terminal.bolden(indentMessage));
-        break;
       case _LogType.status:
         super.printStatus(prefix + terminal.bolden(indentMessage));
-        break;
       case _LogType.trace:
         // This seems wrong, since there is a 'printTrace' to call on the
         // superclass, but it's actually the entire point of this logger: to
         // make things more verbose than they normally would be.
         super.printStatus(prefix + indentMessage);
-        break;
     }
   }
 
@@ -1059,7 +1095,7 @@ class VerboseLogger extends DelegatingLogger {
 }
 
 class PrefixedErrorLogger extends DelegatingLogger {
-  PrefixedErrorLogger(Logger parent) : super(parent);
+  PrefixedErrorLogger(super.parent);
 
   @override
   void printError(
@@ -1072,7 +1108,7 @@ class PrefixedErrorLogger extends DelegatingLogger {
     bool? wrap,
   }) {
     hadErrorOutput = true;
-    if (message.trim().isNotEmpty == true) {
+    if (message.trim().isNotEmpty) {
       message = 'ERROR: $message';
     }
     super.printError(
@@ -1111,9 +1147,11 @@ abstract class Status {
   Status({
     this.onFinish,
     required Stopwatch stopwatch,
+    this.timeout,
   }) : _stopwatch = stopwatch;
 
   final VoidCallback? onFinish;
+  final Duration? timeout;
 
   @protected
   final Stopwatch _stopwatch;
@@ -1125,6 +1163,9 @@ abstract class Status {
     }
     return getElapsedAsMilliseconds(_stopwatch.elapsed);
   }
+
+  @visibleForTesting
+  bool get seemsSlow => timeout != null && _stopwatch.elapsed > timeout!;
 
   /// Call to start spinning.
   void start() {
@@ -1159,12 +1200,9 @@ abstract class Status {
 /// A [Status] that shows nothing.
 class SilentStatus extends Status {
   SilentStatus({
-    required Stopwatch stopwatch,
-    VoidCallback? onFinish,
-  }) : super(
-    onFinish: onFinish,
-    stopwatch: stopwatch,
-  );
+    required super.stopwatch,
+    super.onFinish,
+  });
 
   @override
   void finish() {
@@ -1174,20 +1212,16 @@ class SilentStatus extends Status {
 
 const int _kTimePadding = 8; // should fit "99,999ms"
 
-/// Constructor writes [message] to [stdout].  On [cancel] or [stop], will call
+/// Constructor writes [message] to [stdout]. On [cancel] or [stop], will call
 /// [onFinish]. On [stop], will additionally print out summary information.
 class SummaryStatus extends Status {
   SummaryStatus({
     this.message = '',
-    required Stopwatch stopwatch,
+    required super.stopwatch,
     this.padding = kDefaultStatusPadding,
-    VoidCallback? onFinish,
+    super.onFinish,
     required Stdio stdio,
-  }) : _stdio = stdio,
-       super(
-         onFinish: onFinish,
-         stopwatch: stopwatch,
-        );
+  }) : _stdio = stdio;
 
   final String message;
   final int padding;
@@ -1243,20 +1277,22 @@ class SummaryStatus extends Status {
 /// Call [pause] before outputting any text while this is running.
 class AnonymousSpinnerStatus extends Status {
   AnonymousSpinnerStatus({
-    VoidCallback? onFinish,
-    required Stopwatch stopwatch,
+    super.onFinish,
+    required super.stopwatch,
     required Stdio stdio,
     required Terminal terminal,
+    this.slowWarningCallback,
+    this.warningColor,
+    super.timeout,
   }) : _stdio = stdio,
        _terminal = terminal,
-       _animation = _selectAnimation(terminal),
-       super(
-         onFinish: onFinish,
-         stopwatch: stopwatch,
-        );
+       _animation = _selectAnimation(terminal);
 
   final Stdio _stdio;
   final Terminal _terminal;
+  String _slowWarning = '';
+  final SlowWarningCallback? slowWarningCallback;
+  final TerminalColor? warningColor;
 
   static const String _backspaceChar = '\b';
   static const String _clearChar = ' ';
@@ -1300,9 +1336,10 @@ class AnonymousSpinnerStatus extends Status {
   Timer? timer;
   int ticks = 0;
   int _lastAnimationFrameLength = 0;
+  bool timedOut = false;
 
   String get _currentAnimationFrame => _animation[ticks % _animation.length];
-  int get _currentLineLength => _lastAnimationFrameLength;
+  int get _currentLineLength => _lastAnimationFrameLength + _slowWarning.length;
 
   void _writeToStdOut(String message) => _stdio.stdoutWrite(message);
 
@@ -1328,10 +1365,28 @@ class AnonymousSpinnerStatus extends Status {
 
   void _callback(Timer timer) {
     assert(this.timer == timer);
-    assert(timer != null);
     assert(timer.isActive);
     _writeToStdOut(_backspaceChar * _lastAnimationFrameLength);
     ticks += 1;
+    if (seemsSlow) {
+      if (!timedOut) {
+        timedOut = true;
+        if (_currentLineLength > _lastAnimationFrameLength) {
+          _clear(_currentLineLength - _lastAnimationFrameLength);
+        }
+      }
+      final SlowWarningCallback? callback = slowWarningCallback;
+      if (_slowWarning.isEmpty && callback != null) {
+        final TerminalColor? color = warningColor;
+        if (color != null) {
+          _slowWarning = _terminal.color(callback(), color);
+        } else {
+          _slowWarning = callback();
+        }
+
+        _writeToStdOut(_slowWarning);
+      }
+    }
     final String newFrame = _currentAnimationFrame;
     _lastAnimationFrameLength = newFrame.runes.length;
     _writeToStdOut(newFrame);
@@ -1363,7 +1418,8 @@ class AnonymousSpinnerStatus extends Status {
     assert(timer!.isActive);
     timer?.cancel();
     timer = null;
-    _clear(_lastAnimationFrameLength);
+    _clear(_lastAnimationFrameLength + _slowWarning.length);
+    _slowWarning = '';
     _lastAnimationFrameLength = 0;
     super.finish();
   }
@@ -1382,16 +1438,11 @@ class SpinnerStatus extends AnonymousSpinnerStatus {
   SpinnerStatus({
     required this.message,
     this.padding = kDefaultStatusPadding,
-    VoidCallback? onFinish,
-    required Stopwatch stopwatch,
-    required Stdio stdio,
-    required Terminal terminal,
-  }) : super(
-         onFinish: onFinish,
-         stopwatch: stopwatch,
-         stdio: stdio,
-         terminal: terminal,
-        );
+    super.onFinish,
+    required super.stopwatch,
+    required super.stdio,
+    required super.terminal,
+  });
 
   final String message;
   final int padding;

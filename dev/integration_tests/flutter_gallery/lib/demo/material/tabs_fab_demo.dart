@@ -35,7 +35,7 @@ final List<_Page> _allPages = <_Page>[
 ];
 
 class TabsFabDemo extends StatefulWidget {
-  const TabsFabDemo({Key? key}) : super(key: key);
+  const TabsFabDemo({super.key});
 
   static const String routeName = '/material/tabs-fab';
 
@@ -71,14 +71,14 @@ class _TabsFabDemoState extends State<TabsFabDemo> with SingleTickerProviderStat
   }
 
   void _showExplanatoryText() {
-    _scaffoldKey.currentState!.showBottomSheet<void>((BuildContext context) {
+    _scaffoldKey.currentState!.showBottomSheet((BuildContext context) {
       return Container(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: Theme.of(context).dividerColor))
         ),
         child: Padding(
           padding: const EdgeInsets.all(32.0),
-          child: Text(_explanatoryText, style: Theme.of(context).textTheme.subtitle1),
+          child: Text(_explanatoryText, style: Theme.of(context).textTheme.titleMedium),
         ),
       );
     });
@@ -107,8 +107,9 @@ class _TabsFabDemoState extends State<TabsFabDemo> with SingleTickerProviderStat
   }
 
   Widget? buildFloatingActionButton(_Page page) {
-    if (!page.fabDefined)
+    if (!page.fabDefined) {
       return null;
+    }
 
     if (_extendedButtons) {
       return FloatingActionButton.extended(

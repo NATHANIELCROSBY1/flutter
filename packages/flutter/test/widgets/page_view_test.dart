@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -12,11 +13,46 @@ import 'semantics_tester.dart';
 import 'states.dart';
 
 void main() {
+  // Regression test for https://github.com/flutter/flutter/issues/100451
+  testWidgets('PageView.builder respects findChildIndexCallback', (WidgetTester tester) async {
+    bool finderCalled = false;
+    int itemCount = 7;
+    late StateSetter stateSetter;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            stateSetter = setState;
+            return PageView.builder(
+              itemCount: itemCount,
+              itemBuilder: (BuildContext _, int index) => Container(
+                key: Key('$index'),
+                height: 2000.0,
+              ),
+              findChildIndexCallback: (Key key) {
+                finderCalled = true;
+                return null;
+              },
+            );
+          },
+        ),
+      )
+    );
+    expect(finderCalled, false);
+
+    // Trigger update.
+    stateSetter(() => itemCount = 77);
+    await tester.pump();
+
+    expect(finderCalled, true);
+  });
+
   testWidgets('PageView resize from zero-size viewport should not lose state', (WidgetTester tester) async {
     // Regression test for https://github.com/flutter/flutter/issues/88956
-    final PageController controller = PageController(
-      initialPage: 1,
-    );
+    final PageController controller = PageController(initialPage: 1);
+    addTearDown(controller.dispose);
 
     Widget build(Size size) {
       return Directionality(
@@ -59,9 +95,8 @@ void main() {
 
   testWidgets('Change the page through the controller when zero-size viewport', (WidgetTester tester) async {
     // Regression test for https://github.com/flutter/flutter/issues/88956
-    final PageController controller = PageController(
-      initialPage: 1,
-    );
+    final PageController controller = PageController(initialPage: 1);
+    addTearDown(controller.dispose);
 
     Widget build(Size size) {
       return Directionality(
@@ -97,9 +132,48 @@ void main() {
     expect(find.text('Illinois'), findsOneWidget);
   });
 
+  testWidgets('_PagePosition.applyViewportDimension should not throw', (WidgetTester tester) async {
+    // Regression test for https://github.com/flutter/flutter/issues/101007
+    final PageController controller = PageController(initialPage: 1);
+    addTearDown(controller.dispose);
+
+    // Set the starting viewportDimension to 0.0
+    await tester.binding.setSurfaceSize(Size.zero);
+    final MediaQueryData mediaQueryData = MediaQueryData.fromView(tester.view);
+
+    Widget build(Size size) {
+      return MediaQuery(
+        data: mediaQueryData.copyWith(size: size),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: SizedBox.expand(
+              child: PageView(
+                controller: controller,
+                onPageChanged: (int page) { },
+                children: kStates.map<Widget>((String state) => Text(state)).toList(),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build(Size.zero));
+    const Size surfaceSize = Size(500,400);
+    await tester.binding.setSurfaceSize(surfaceSize);
+    await tester.pumpWidget(build(surfaceSize));
+
+    expect(tester.takeException(), isNull);
+
+    // Reset TestWidgetsFlutterBinding surfaceSize
+    await tester.binding.setSurfaceSize(null);
+  });
+
   testWidgets('PageController cannot return page while unattached',
       (WidgetTester tester) async {
     final PageController controller = PageController();
+    addTearDown(controller.dispose);
     expect(() => controller.page, throwsAssertionError);
   });
 
@@ -196,7 +270,12 @@ void main() {
     expect(sizeOf(0), equals(const Size(800.0, 600.0)));
 
     // Easing overscroll past overscroll limit.
-    await tester.drag(find.byType(PageView), const Offset(-200.0, 0.0));
+    if (debugDefaultTargetPlatformOverride == TargetPlatform.macOS) {
+      await tester.drag(find.byType(PageView), const Offset(-500.0, 0.0));
+    }
+    else {
+      await tester.drag(find.byType(PageView), const Offset(-200.0, 0.0));
+    }
     await tester.pump();
 
     expect(leftOf(0), lessThan(0.0));
@@ -205,6 +284,7 @@ void main() {
 
   testWidgets('PageController control test', (WidgetTester tester) async {
     final PageController controller = PageController(initialPage: 4);
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
@@ -303,6 +383,8 @@ void main() {
 
   testWidgets('PageController nextPage and previousPage return Futures that resolve', (WidgetTester tester) async {
     final PageController controller = PageController();
+    addTearDown(controller.dispose);
+
     await tester.pumpWidget(Directionality(
         textDirection: TextDirection.ltr,
         child: PageView(
@@ -337,9 +419,7 @@ void main() {
     await tester.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
       child: Center(
-        child: SizedBox(
-          width: 0.0,
-          height: 0.0,
+        child: SizedBox.shrink(
           child: PageView(
             children: kStates.map<Widget>((String state) => Text(state)).toList(),
           ),
@@ -418,6 +498,7 @@ void main() {
   testWidgets('Bouncing scroll physics ballistics does not overshoot', (WidgetTester tester) async {
     final List<int> log = <int>[];
     final PageController controller = PageController(viewportFraction: 0.9);
+    addTearDown(controller.dispose);
 
     Widget build(PageController controller, { Size? size }) {
       final Widget pageView = Directionality(
@@ -471,6 +552,7 @@ void main() {
 
   testWidgets('PageView viewportFraction', (WidgetTester tester) async {
     PageController controller = PageController(viewportFraction: 7/8);
+    addTearDown(controller.dispose);
 
     Widget build(PageController controller) {
       return Directionality(
@@ -504,6 +586,7 @@ void main() {
     expect(tester.getTopLeft(find.text('Idaho')), const Offset(750.0, 0.0));
 
     controller = PageController(viewportFraction: 39/40);
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(build(controller));
 
@@ -577,6 +660,7 @@ void main() {
 
   testWidgets('PageView small viewportFraction', (WidgetTester tester) async {
     final PageController controller = PageController(viewportFraction: 1/8);
+    addTearDown(controller.dispose);
 
     Widget build(PageController controller) {
       return Directionality(
@@ -621,6 +705,7 @@ void main() {
 
   testWidgets('PageView large viewportFraction', (WidgetTester tester) async {
     final PageController controller = PageController(viewportFraction: 5/4);
+    addTearDown(controller.dispose);
 
     Widget build(PageController controller) {
       return Directionality(
@@ -675,12 +760,14 @@ void main() {
       }
 
       final PageController oldController = PageController(viewportFraction: 5/4);
+      addTearDown(oldController.dispose);
       await tester.pumpWidget(build(oldController));
 
       expect(tester.getTopLeft(find.text('Alabama')), const Offset(-100, 0));
       expect(tester.getBottomRight(find.text('Alabama')), const Offset(900.0, 600.0));
 
       final PageController newController = PageController(viewportFraction: 4);
+      addTearDown(newController.dispose);
       await tester.pumpWidget(build(newController));
       newController.jumpToPage(10);
       await tester.pump();
@@ -694,6 +781,7 @@ void main() {
     (WidgetTester tester) async {
       // Regression test for https://github.com/flutter/flutter/issues/45096.
       final PageController controller = PageController(viewportFraction: 5/4);
+      addTearDown(controller.dispose);
 
       Widget build(PageController controller) {
         return Directionality(
@@ -731,6 +819,7 @@ void main() {
     (WidgetTester tester) async {
       // Regression test for https://github.com/flutter/flutter/issues/23873.
       final PageController controller = PageController(viewportFraction: 1/4);
+      addTearDown(controller.dispose);
       late int tappedIndex;
 
       Widget build() {
@@ -780,6 +869,7 @@ void main() {
       initialPage: kStates.length - 1,
       viewportFraction: 0.5,
     );
+    addTearDown(controller.dispose);
 
     Widget build(Size size) {
       return Directionality(
@@ -820,6 +910,7 @@ void main() {
     final PageController controller = PageController(
       initialPage: kStates.length - 1,
     );
+    addTearDown(controller.dispose);
     int changeIndex = 0;
     Widget build() {
       return Directionality(
@@ -844,6 +935,7 @@ void main() {
 
   testWidgets('PageView can restore page', (WidgetTester tester) async {
     final PageController controller = PageController();
+    addTearDown(controller.dispose);
     expect(
       () => controller.page,
       throwsA(isAssertionError.having(
@@ -904,6 +996,7 @@ void main() {
     expect(controller.page, 2);
 
     final PageController controller2 = PageController(keepPage: false);
+    addTearDown(controller2.dispose);
     await tester.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
       child: PageStorage(
@@ -926,6 +1019,7 @@ void main() {
     final SemanticsTester semantics = SemanticsTester(tester);
 
     final PageController controller = PageController();
+    addTearDown(controller.dispose);
     await tester.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
       child: PageView(
@@ -969,6 +1063,7 @@ void main() {
       viewportDimension: 25.0,
       axisDirection: AxisDirection.right,
       viewportFraction: 1.0,
+      devicePixelRatio: tester.view.devicePixelRatio,
     );
     expect(page.page, 6);
     final PageMetrics page2 = page.copyWith(
@@ -979,6 +1074,7 @@ void main() {
 
   testWidgets('Page controller can handle rounding issue', (WidgetTester tester) async {
     final PageController pageController = PageController();
+    addTearDown(pageController.dispose);
 
     await tester.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
@@ -1001,6 +1097,7 @@ void main() {
     final SemanticsTester semantics = SemanticsTester(tester);
 
     final PageController controller = PageController();
+    addTearDown(controller.dispose);
     await tester.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
       child: PageView(
@@ -1099,8 +1196,9 @@ void main() {
 
   testWidgets('PageView - precision error inside RenderSliverFixedExtentBoxAdaptor', (WidgetTester tester) async {
     // Regression test for https://github.com/flutter/flutter/issues/95101
-
     final PageController controller = PageController(initialPage: 152);
+    addTearDown(controller.dispose);
+
     await tester.pumpWidget(
       Center(
         child: SizedBox(
@@ -1122,5 +1220,83 @@ void main() {
     controller.jumpToPage(365);
     await tester.pump();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PageView content should not be stretched on precision error', (WidgetTester tester) async {
+    // Regression test for https://github.com/flutter/flutter/issues/126561.
+    final PageController controller = PageController();
+    addTearDown(controller.dispose);
+
+    const double pixel6EmulatorWidth = 411.42857142857144;
+
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData(useMaterial3: true),
+      home: Center(
+        child: SizedBox(
+          width: pixel6EmulatorWidth,
+          child: PageView(
+            controller: controller,
+            physics: const PageScrollPhysics().applyTo(const ClampingScrollPhysics()),
+            children: const <Widget>[
+              Center(child: Text('First Page')),
+              Center(child: Text('Second Page')),
+              Center(child: Text('Third Page')),
+            ],
+          ),
+        ),
+      ),
+    ));
+
+    controller.animateToPage(2, duration: const Duration(milliseconds: 300), curve: Curves.ease);
+    await tester.pumpAndSettle();
+
+    final Finder transformFinder = find.descendant(of: find.byType(PageView), matching: find.byType(Transform));
+    expect(transformFinder, findsOneWidget);
+
+    // Get the Transform widget that stretches the PageView.
+    final Transform transform = tester.firstWidget<Transform>(
+      find.descendant(
+        of: find.byType(PageView),
+        matching: find.byType(Transform),
+      ),
+    );
+
+    // Check the stretch factor in the first element of the transform matrix.
+    expect(transform.transform.storage.first, 1.0);
+  });
+
+  testWidgets('PageController onAttach, onDetach', (WidgetTester tester) async {
+    int attach = 0;
+    int detach = 0;
+    final PageController controller = PageController(
+      onAttach: (_) { attach++; },
+      onDetach: (_) { detach++; },
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData(useMaterial3: true),
+      home: Center(
+        child: PageView(
+          controller: controller,
+          physics: const PageScrollPhysics().applyTo(const ClampingScrollPhysics()),
+          children: const <Widget>[
+            Center(child: Text('First Page')),
+            Center(child: Text('Second Page')),
+            Center(child: Text('Third Page')),
+          ],
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(attach, 1);
+    expect(detach, 0);
+
+    await tester.pumpWidget(Container());
+    await tester.pumpAndSettle();
+
+    expect(attach, 1);
+    expect(detach, 1);
   });
 }

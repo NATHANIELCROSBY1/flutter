@@ -17,6 +17,7 @@ void _verifyKeyEvent<T extends KeyEvent>(KeyEvent event, PhysicalKeyboardKey phy
   expect(event.synthesized, false);
 }
 
+// ignore: deprecated_member_use
 void _verifyRawKeyEvent<T extends RawKeyEvent>(RawKeyEvent event, PhysicalKeyboardKey physical, LogicalKeyboardKey logical, String? character) {
   expect(event, isA<T>());
   expect(event.physicalKey, physical);
@@ -38,13 +39,16 @@ Future<void> _shouldThrow<T extends Error>(AsyncValueGetter<void> func) async {
 
 void main() {
   testWidgets('simulates keyboard events (RawEvent)', (WidgetTester tester) async {
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = KeyDataTransitMode.rawKeyData;
 
+    // ignore: deprecated_member_use
     final List<RawKeyEvent> events = <RawKeyEvent>[];
 
     final FocusNode focusNode = FocusNode();
 
     await tester.pumpWidget(
+      // ignore: deprecated_member_use
       RawKeyboardListener(
         focusNode: focusNode,
         onKey: events.add,
@@ -68,11 +72,14 @@ void main() {
       for (int i = 0; i < events.length; ++i) {
         final bool isEven = i.isEven;
         if (isEven) {
+          // ignore: deprecated_member_use
           expect(events[i].runtimeType, equals(RawKeyDownEvent));
         } else {
+          // ignore: deprecated_member_use
           expect(events[i].runtimeType, equals(RawKeyUpEvent));
         }
         if (i < 4) {
+          // ignore: deprecated_member_use
           expect(events[i].data.isModifierPressed(ModifierKey.shiftModifier, side: KeyboardSide.left), equals(isEven));
         }
       }
@@ -82,10 +89,12 @@ void main() {
     await tester.pumpWidget(Container());
     focusNode.dispose();
 
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = null;
   });
 
   testWidgets('simulates keyboard events (KeyData then RawKeyEvent)', (WidgetTester tester) async {
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = KeyDataTransitMode.keyDataThenRawKeyData;
 
     final List<KeyEvent> events = <KeyEvent>[];
@@ -146,6 +155,29 @@ void main() {
 
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyA);
     _verifyKeyEvent<KeyUpEvent>(events[0], PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyA, null);
+    expect(HardwareKeyboard.instance.physicalKeysPressed, isEmpty);
+    expect(HardwareKeyboard.instance.logicalKeysPressed, isEmpty);
+    expect(HardwareKeyboard.instance.lockModesEnabled, isEmpty);
+    events.clear();
+
+    // Key press keyA with physical keyQ
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyA, physicalKey: PhysicalKeyboardKey.keyQ);
+    expect(events.length, 1);
+    _verifyKeyEvent<KeyDownEvent>(events[0], PhysicalKeyboardKey.keyQ, LogicalKeyboardKey.keyA, 'a');
+    expect(HardwareKeyboard.instance.physicalKeysPressed, equals(<PhysicalKeyboardKey>{PhysicalKeyboardKey.keyQ}));
+    expect(HardwareKeyboard.instance.logicalKeysPressed, equals(<LogicalKeyboardKey>{LogicalKeyboardKey.keyA}));
+    expect(HardwareKeyboard.instance.lockModesEnabled, isEmpty);
+    events.clear();
+
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyA, physicalKey: PhysicalKeyboardKey.keyQ);
+    _verifyKeyEvent<KeyRepeatEvent>(events[0], PhysicalKeyboardKey.keyQ, LogicalKeyboardKey.keyA, 'a');
+    expect(HardwareKeyboard.instance.physicalKeysPressed, equals(<PhysicalKeyboardKey>{PhysicalKeyboardKey.keyQ}));
+    expect(HardwareKeyboard.instance.logicalKeysPressed, equals(<LogicalKeyboardKey>{LogicalKeyboardKey.keyA}));
+    expect(HardwareKeyboard.instance.lockModesEnabled, isEmpty);
+    events.clear();
+
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyA, physicalKey: PhysicalKeyboardKey.keyQ);
+    _verifyKeyEvent<KeyUpEvent>(events[0], PhysicalKeyboardKey.keyQ, LogicalKeyboardKey.keyA, null);
     expect(HardwareKeyboard.instance.physicalKeysPressed, isEmpty);
     expect(HardwareKeyboard.instance.logicalKeysPressed, isEmpty);
     expect(HardwareKeyboard.instance.lockModesEnabled, isEmpty);
@@ -222,10 +254,12 @@ void main() {
     await tester.pumpWidget(Container());
     focusNode.dispose();
 
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = null;
   });
 
   testWidgets('simulates using the correct transit mode: rawKeyData', (WidgetTester tester) async {
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = KeyDataTransitMode.rawKeyData;
 
     final List<Object> events = <Object>[];
@@ -234,6 +268,7 @@ void main() {
     await tester.pumpWidget(
       Focus(
         focusNode: focusNode,
+        // ignore: deprecated_member_use
         onKey: (FocusNode node, RawKeyEvent event) {
           events.add(event);
           return KeyEventResult.ignored;
@@ -254,7 +289,9 @@ void main() {
     expect(events.length, 2);
     expect(events[0], isA<KeyEvent>());
     _verifyKeyEvent<KeyDownEvent>(events[0] as KeyEvent, PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyA, 'a');
+    // ignore: deprecated_member_use
     expect(events[1], isA<RawKeyEvent>());
+    // ignore: deprecated_member_use
     _verifyRawKeyEvent<RawKeyDownEvent>(events[1] as RawKeyEvent, PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyA, 'a');
     events.clear();
 
@@ -266,22 +303,27 @@ void main() {
     expect(events.length, 2);
     expect(events[0], isA<KeyEvent>());
     _verifyKeyEvent<KeyUpEvent>(events[0] as KeyEvent, PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyA, null);
+    // ignore: deprecated_member_use
     expect(events[1], isA<RawKeyEvent>());
+    // ignore: deprecated_member_use
     _verifyRawKeyEvent<RawKeyUpEvent>(events[1] as RawKeyEvent, PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyB, null);
     events.clear();
 
     // Manually switch the transit mode to `keyDataThenRawKeyData`. This will
     // never happen in real applications so the assertion error can verify that
     // the transit mode is correctly applied.
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = KeyDataTransitMode.keyDataThenRawKeyData;
 
     await _shouldThrow<AssertionError>(() =>
       simulateKeyUpEvent(LogicalKeyboardKey.keyB, physicalKey: PhysicalKeyboardKey.keyA));
 
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = null;
   });
 
   testWidgets('simulates using the correct transit mode: keyDataThenRawKeyData', (WidgetTester tester) async {
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = KeyDataTransitMode.keyDataThenRawKeyData;
 
     final List<Object> events = <Object>[];
@@ -290,6 +332,7 @@ void main() {
     await tester.pumpWidget(
       Focus(
         focusNode: focusNode,
+        // ignore: deprecated_member_use
         onKey: (FocusNode node, RawKeyEvent event) {
           events.add(event);
           return KeyEventResult.ignored;
@@ -310,18 +353,21 @@ void main() {
     expect(events.length, 2);
     expect(events[0], isA<KeyEvent>());
     _verifyKeyEvent<KeyDownEvent>(events[0] as KeyEvent, PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyA, 'a');
+    // ignore: deprecated_member_use
     expect(events[1], isA<RawKeyEvent>());
+    // ignore: deprecated_member_use
     _verifyRawKeyEvent<RawKeyDownEvent>(events[1] as RawKeyEvent, PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyA, 'a');
     events.clear();
 
     // A (physical keyA, logical keyB) is released.
     //
     // Since this event is transmitted to HardwareKeyboard as-is, it will be rejected due to
-    // inconsistent logical key. This does not indicate behaviral difference,
+    // inconsistent logical key. This does not indicate behavioral difference,
     // since KeyData is will never send malformed data sequence in real applications.
     await _shouldThrow<AssertionError>(() =>
       simulateKeyUpEvent(LogicalKeyboardKey.keyB, physicalKey: PhysicalKeyboardKey.keyA));
 
+    // ignore: deprecated_member_use
     debugKeyEventSimulatorTransitModeOverride = null;
   });
 }

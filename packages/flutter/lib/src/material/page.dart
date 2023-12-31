@@ -20,6 +20,9 @@ import 'theme.dart';
 /// fullscreen modal dialog. On iOS, those routes animate from the bottom to the
 /// top rather than horizontally.
 ///
+/// If `barrierDismissible` is true, then pressing the escape key on the keyboard
+/// will cause the current route to be popped with null as the value.
+///
 /// The type `T` specifies the return type of the route which can be supplied as
 /// the route is popped from the stack via [Navigator.pop] by providing the
 /// optional `result` argument.
@@ -31,18 +34,14 @@ import 'theme.dart';
 ///  * [MaterialPage], which is a [Page] of this class.
 class MaterialPageRoute<T> extends PageRoute<T> with MaterialRouteTransitionMixin<T> {
   /// Construct a MaterialPageRoute whose contents are defined by [builder].
-  ///
-  /// The values of [builder], [maintainState], and [PageRoute.fullscreenDialog]
-  /// must not be null.
   MaterialPageRoute({
     required this.builder,
-    RouteSettings? settings,
+    super.settings,
     this.maintainState = true,
-    bool fullscreenDialog = false,
-  }) : assert(builder != null),
-       assert(maintainState != null),
-       assert(fullscreenDialog != null),
-       super(settings: settings, fullscreenDialog: fullscreenDialog) {
+    super.fullscreenDialog,
+    super.allowSnapshotting = true,
+    super.barrierDismissible = false,
+  }) {
     assert(opaque);
   }
 
@@ -63,19 +62,24 @@ class MaterialPageRoute<T> extends PageRoute<T> with MaterialRouteTransitionMixi
 /// A mixin that provides platform-adaptive transitions for a [PageRoute].
 ///
 /// {@template flutter.material.materialRouteTransitionMixin}
-/// For Android, the entrance transition for the page slides the route upwards
-/// and fades it in. The exit transition is the same, but in reverse.
+/// For Android, the entrance transition for the page zooms in and fades in
+/// while the exiting page zooms out and fades out. The exit transition is similar,
+/// but in reverse.
 ///
-/// The transition is adaptive to the platform and on iOS, the route slides in
-/// from the right and exits in reverse. The route also shifts to the left in
-/// parallax when another page enters to cover it. (These directions are flipped
-/// in environments with a right-to-left reading direction.)
+/// For iOS, the page slides in from the right and exits in reverse. The page
+/// also shifts to the left in parallax when another page enters to cover it.
+/// (These directions are flipped in environments with a right-to-left reading
+/// direction.)
 /// {@endtemplate}
 ///
 /// See also:
 ///
 ///  * [PageTransitionsTheme], which defines the default page transitions used
 ///    by the [MaterialRouteTransitionMixin.buildTransitions].
+///  * [ZoomPageTransitionsBuilder], which is the default page transition used
+///    by the [PageTransitionsTheme].
+///  * [CupertinoPageTransitionsBuilder], which is the default page transition
+///    for iOS and macOS.
 mixin MaterialRouteTransitionMixin<T> on PageRoute<T> {
   /// Builds the primary contents of the route.
   @protected
@@ -104,15 +108,6 @@ mixin MaterialRouteTransitionMixin<T> on PageRoute<T> {
     Animation<double> secondaryAnimation,
   ) {
     final Widget result = buildContent(context);
-    assert(() {
-      if (result == null) {
-        throw FlutterError(
-          'The builder for route "${settings.name}" returned null.\n'
-          'Route builders must never return null.',
-        );
-      }
-      return true;
-    }());
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
@@ -153,14 +148,12 @@ class MaterialPage<T> extends Page<T> {
     required this.child,
     this.maintainState = true,
     this.fullscreenDialog = false,
-    LocalKey? key,
-    String? name,
-    Object? arguments,
-    String? restorationId,
-  }) : assert(child != null),
-       assert(maintainState != null),
-       assert(fullscreenDialog != null),
-       super(key: key, name: name, arguments: arguments, restorationId: restorationId);
+    this.allowSnapshotting = true,
+    super.key,
+    super.name,
+    super.arguments,
+    super.restorationId,
+  });
 
   /// The content to be shown in the [Route] created by this page.
   final Widget child;
@@ -171,9 +164,12 @@ class MaterialPage<T> extends Page<T> {
   /// {@macro flutter.widgets.PageRoute.fullscreenDialog}
   final bool fullscreenDialog;
 
+  /// {@macro flutter.widgets.TransitionRoute.allowSnapshotting}
+  final bool allowSnapshotting;
+
   @override
   Route<T> createRoute(BuildContext context) {
-    return _PageBasedMaterialPageRoute<T>(page: this);
+    return _PageBasedMaterialPageRoute<T>(page: this, allowSnapshotting: allowSnapshotting);
   }
 }
 
@@ -184,8 +180,8 @@ class MaterialPage<T> extends Page<T> {
 class _PageBasedMaterialPageRoute<T> extends PageRoute<T> with MaterialRouteTransitionMixin<T> {
   _PageBasedMaterialPageRoute({
     required MaterialPage<T> page,
-  }) : assert(page != null),
-       super(settings: page) {
+    super.allowSnapshotting,
+  }) : super(settings: page) {
     assert(opaque);
   }
 

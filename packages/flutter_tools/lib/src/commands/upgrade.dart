@@ -12,6 +12,7 @@ import '../cache.dart';
 import '../dart/pub.dart';
 import '../globals.dart' as globals;
 import '../persistent_tool_state.dart';
+import '../project.dart';
 import '../runner/flutter_command.dart';
 import '../version.dart';
 import 'channel.dart';
@@ -46,6 +47,7 @@ class UpgradeCommand extends FlutterCommand {
         hide: !verboseHelp,
         help: 'Override the upgrade working directory. '
               'This is only intended to enable integration testing of the tool itself.'
+              // Also notably, this will override the FakeFlutterVersion if any is set!
       )
       ..addFlag(
         'verify-only',
@@ -75,10 +77,14 @@ class UpgradeCommand extends FlutterCommand {
       force: boolArg('force'),
       continueFlow: boolArg('continue'),
       testFlow: stringArg('working-directory') != null,
-      gitTagVersion: GitTagVersion.determine(globals.processUtils),
+      gitTagVersion: GitTagVersion.determine(
+        globals.processUtils,
+        globals.platform,
+        workingDirectory: _commandRunner.workingDirectory,
+      ),
       flutterVersion: stringArg('working-directory') == null
         ? globals.flutterVersion
-        : FlutterVersion(workingDirectory: _commandRunner.workingDirectory),
+        : FlutterVersion(flutterRoot: _commandRunner.workingDirectory!, fs: globals.fs),
       verifyOnly: boolArg('verify-only'),
     );
   }
@@ -86,8 +92,7 @@ class UpgradeCommand extends FlutterCommand {
 
 @visibleForTesting
 class UpgradeCommandRunner {
-
-  String? workingDirectory;
+  String? workingDirectory; // set in runCommand() above
 
   Future<FlutterCommandResult> runCommand({
     required bool force,
@@ -203,11 +208,27 @@ class UpgradeCommandRunner {
     // Make sure the welcome message re-display is delayed until the end.
     final PersistentToolState persistentToolState = globals.persistentToolState!;
     persistentToolState.setShouldRedisplayWelcomeMessage(false);
-    await precacheArtifacts();
+    await precacheArtifacts(workingDirectory);
     await updatePackages(flutterVersion);
     await runDoctor();
     // Force the welcome message to re-display following the upgrade.
     persistentToolState.setShouldRedisplayWelcomeMessage(true);
+    if (globals.flutterVersion.channel == 'master' || globals.flutterVersion.channel == 'main') {
+      globals.printStatus(
+        '\n'
+        'This channel is intended for Flutter contributors. '
+        'This channel is not as thoroughly tested as the "beta" and "stable" channels. '
+        'We do not recommend using this channel for normal use as it more likely to contain serious regressions.\n'
+        '\n'
+        'For information on contributing to Flutter, see our contributing guide:\n'
+        '    https://github.com/flutter/flutter/blob/master/CONTRIBUTING.md\n'
+        '\n'
+        'For the most up to date stable version of flutter, consider using the "beta" channel instead. '
+        'The Flutter "beta" channel enjoys all the same automated testing as the "stable" channel, '
+        'but is updated roughly once a month instead of once a quarter.\n'
+        'To change channel, run the "flutter channel beta" command.',
+      );
+    }
   }
 
   Future<bool> hasUncommittedChanges() async {
@@ -229,74 +250,6 @@ class UpgradeCommandRunner {
     }
   }
 
-  /// Checks if the Flutter git repository is tracking a standard remote.
-  ///
-  /// A "standard remote" is one having the same url as [globals.flutterGit].
-  /// The upgrade process only supports standard remotes.
-  ///
-  /// Exits tool if the tracking remote is not standard.
-  void verifyStandardRemote(FlutterVersion localVersion) {
-    // If repositoryUrl of the local version is null, exit
-    final String? repositoryUrl = localVersion.repositoryUrl;
-    if (repositoryUrl == null) {
-      throwToolExit(
-        'Unable to upgrade Flutter: The tool could not determine the remote '
-        'upstream which is being tracked by the SDK.\n'
-        'Re-install Flutter by going to $_flutterInstallDocs.'
-      );
-    }
-
-    // Strip `.git` suffix before comparing the remotes
-    final String trackingUrl = stripDotGit(repositoryUrl);
-    final String flutterGitUrl = stripDotGit(globals.flutterGit);
-
-    // Exempt the official flutter git SSH remote from this check
-    if (trackingUrl == 'git@github.com:flutter/flutter') {
-      return;
-    }
-
-    if (trackingUrl != flutterGitUrl) {
-      if (globals.platform.environment.containsKey('FLUTTER_GIT_URL')) {
-        // If `FLUTTER_GIT_URL` is set, inform the user to either remove the
-        // `FLUTTER_GIT_URL` environment variable or set it to the current
-        // tracking remote to continue.
-        throwToolExit(
-          'Unable to upgrade Flutter: The Flutter SDK is tracking '
-          '"${localVersion.repositoryUrl}" but "FLUTTER_GIT_URL" is set to '
-          '"${globals.flutterGit}".\n'
-          'Either remove "FLUTTER_GIT_URL" from the environment or set it to '
-          '"${localVersion.repositoryUrl}", and retry. '
-          'Alternatively, re-install Flutter by going to $_flutterInstallDocs.\n'
-          'If this is intentional, it is recommended to use "git" directly to '
-          'keep Flutter SDK up-to date.'
-        );
-      }
-      // If `FLUTTER_GIT_URL` is unset, inform that the user has to set the
-      // environment variable to continue.
-      throwToolExit(
-        'Unable to upgrade Flutter: The Flutter SDK is tracking a non-standard '
-        'remote "${localVersion.repositoryUrl}".\n'
-        'Set the environment variable "FLUTTER_GIT_URL" to '
-        '"${localVersion.repositoryUrl}", and retry. '
-        'Alternatively, re-install Flutter by going to $_flutterInstallDocs.\n'
-        'If this is intentional, it is recommended to use "git" directly to '
-        'keep Flutter SDK up-to date.'
-      );
-    }
-  }
-
-  // Strips ".git" suffix from a given string, preferably an url.
-  // For example, changes 'https://github.com/flutter/flutter.git' to 'https://github.com/flutter/flutter'.
-  // URLs without ".git" suffix will remain unaffected.
-  String stripDotGit(String url) {
-    final RegExp pattern = RegExp(r'(.*)(\.git)$');
-    final RegExpMatch? match = pattern.firstMatch(url);
-    if (match == null) {
-      return url;
-    }
-    return match.group(1)!;
-  }
-
   /// Returns the remote HEAD flutter version.
   ///
   /// Exits tool if HEAD isn't pointing to a branch, or there is no upstream.
@@ -311,9 +264,9 @@ class UpgradeCommandRunner {
         throwOnError: true,
         workingDirectory: workingDirectory,
       );
-      // '@{u}' means upstream HEAD
+      // Get the latest commit revision of the upstream
       final RunResult result = await globals.processUtils.run(
-          <String>[ 'git', 'rev-parse', '--verify', '@{u}'],
+          <String>['git', 'rev-parse', '--verify', kGitTrackingUpstream],
           throwOnError: true,
           workingDirectory: workingDirectory,
       );
@@ -337,8 +290,22 @@ class UpgradeCommandRunner {
         throwToolExit(errorString);
       }
     }
-    verifyStandardRemote(localVersion);
-    return FlutterVersion(workingDirectory: workingDirectory, frameworkRevision: revision);
+    // At this point the current checkout should be on HEAD of a branch having
+    // an upstream. Check whether this upstream is "standard".
+    final VersionCheckError? error = VersionUpstreamValidator(version: localVersion, platform: globals.platform).run();
+    if (error != null) {
+      throwToolExit(
+        'Unable to upgrade Flutter: '
+        '${error.message}\n'
+        'Reinstalling Flutter may fix this issue. Visit $_flutterInstallDocs '
+        'for instructions.'
+      );
+    }
+    return FlutterVersion.fromRevision(
+      flutterRoot: workingDirectory!,
+      frameworkRevision: revision,
+      fs: globals.fs,
+    );
   }
 
   /// Attempts a hard reset to the given revision.
@@ -358,27 +325,6 @@ class UpgradeCommandRunner {
     }
   }
 
-  /// Update the engine repository and precache all artifacts.
-  ///
-  /// Check for and download any engine and pkg/ updates. We run the 'flutter'
-  /// shell script re-entrantly here so that it will download the updated
-  /// Dart and so forth if necessary.
-  Future<void> precacheArtifacts() async {
-    globals.printStatus('');
-    globals.printStatus('Upgrading engine...');
-    final int code = await globals.processUtils.stream(
-      <String>[
-        globals.fs.path.join('bin', 'flutter'), '--no-color', '--no-version-check', 'precache',
-      ],
-      workingDirectory: workingDirectory,
-      allowReentrantFlutter: true,
-      environment: Map<String, String>.of(globals.platform.environment),
-    );
-    if (code != 0) {
-      throwToolExit(null, exitCode: code);
-    }
-  }
-
   /// Update the user's packages.
   Future<void> updatePackages(FlutterVersion flutterVersion) async {
     globals.printStatus('');
@@ -388,7 +334,7 @@ class UpgradeCommandRunner {
       globals.printStatus('');
       await pub.get(
         context: PubContext.pubUpgrade,
-        directory: projectRoot,
+        project: FlutterProject.fromDirectory(globals.fs.directory(projectRoot)),
         upgrade: true,
       );
     }
@@ -405,5 +351,26 @@ class UpgradeCommandRunner {
       workingDirectory: workingDirectory,
       allowReentrantFlutter: true,
     );
+  }
+}
+
+/// Update the engine repository and precache all artifacts.
+///
+/// Check for and download any engine and pkg/ updates. We run the 'flutter'
+/// shell script reentrantly here so that it will download the updated
+/// Dart and so forth if necessary.
+Future<void> precacheArtifacts([String? workingDirectory]) async {
+  globals.printStatus('');
+  globals.printStatus('Upgrading engine...');
+  final int code = await globals.processUtils.stream(
+    <String>[
+      globals.fs.path.join('bin', 'flutter'), '--no-color', '--no-version-check', 'precache',
+    ],
+    allowReentrantFlutter: true,
+    environment: Map<String, String>.of(globals.platform.environment),
+    workingDirectory: workingDirectory,
+  );
+  if (code != 0) {
+    throwToolExit(null, exitCode: code);
   }
 }

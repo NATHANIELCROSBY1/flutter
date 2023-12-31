@@ -54,28 +54,81 @@ class RestorationScope extends StatefulWidget {
   ///
   /// Providing null as the [restorationId] turns off state restoration for
   /// the [child] and its descendants.
-  ///
-  /// The [child] must not be null.
   const RestorationScope({
-    Key? key,
+    super.key,
     required this.restorationId,
     required this.child,
-  }) : assert(child != null),
-       super(key: key);
+  });
 
   /// Returns the [RestorationBucket] inserted into the widget tree by the
   /// closest ancestor [RestorationScope] of `context`.
   ///
+  /// {@template flutter.widgets.restoration.RestorationScope.bucket_warning}
   /// To avoid accidentally overwriting data already stored in the bucket by its
   /// owner, data should not be stored directly in the bucket returned by this
   /// method. Instead, consider claiming a child bucket from the returned bucket
   /// (via [RestorationBucket.claimChild]) and store the restoration data in
   /// that child.
+  /// {@endtemplate}
   ///
   /// This method returns null if state restoration is turned off for this
   /// subtree.
-  static RestorationBucket? of(BuildContext context) {
+  ///
+  /// Calling this method will create a dependency on the closest
+  /// [RestorationScope] in the [context], if there is one.
+  ///
+  /// See also:
+  ///
+  /// * [RestorationScope.maybeOf], which is similar to this method, but asserts
+  ///   if no [RestorationScope] ancestor is found.
+  static RestorationBucket? maybeOf(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<UnmanagedRestorationScope>()?.bucket;
+  }
+
+  /// Returns the [RestorationBucket] inserted into the widget tree by the
+  /// closest ancestor [RestorationScope] of `context`.
+  ///
+  /// {@macro flutter.widgets.restoration.RestorationScope.bucket_warning}
+  ///
+  /// This method will assert in debug mode and throw an exception in release
+  /// mode if state restoration is turned off for this subtree.
+  ///
+  /// Calling this method will create a dependency on the closest
+  /// [RestorationScope] in the [context].
+  ///
+  /// See also:
+  ///
+  /// * [RestorationScope.maybeOf], which is similar to this method, but returns
+  ///   null if no [RestorationScope] ancestor is found.
+  static RestorationBucket of(BuildContext context) {
+    final RestorationBucket? bucket = maybeOf(context);
+    assert(() {
+      if (bucket == null) {
+        throw FlutterError.fromParts(<DiagnosticsNode>[
+          ErrorSummary(
+            'RestorationScope.of() was called with a context that does not '
+            'contain a RestorationScope widget. '
+          ),
+          ErrorDescription(
+            'No RestorationScope widget ancestor could be found starting from '
+            'the context that was passed to RestorationScope.of(). This can '
+            'happen because you are using a widget that looks for a '
+            'RestorationScope ancestor, but no such ancestor exists.\n'
+            'The context used was:\n'
+            '  $context'
+          ),
+          ErrorHint(
+            'State restoration must be enabled for a RestorationScope to exist. '
+            'This can be done by passing a restorationScopeId to MaterialApp, '
+            'CupertinoApp, or WidgetsApp at the root of the widget tree or by '
+            'wrapping the widget tree in a RootRestorationScope.'
+          ),
+        ],
+        );
+      }
+      return true;
+    }());
+    return bucket!;
   }
 
   /// The widget below this widget in the tree.
@@ -144,14 +197,11 @@ class UnmanagedRestorationScope extends InheritedWidget {
   ///
   /// When [bucket] is null state restoration is turned off for the [child] and
   /// its descendants.
-  ///
-  /// The [child] must not be null.
   const UnmanagedRestorationScope({
-    Key? key,
+    super.key,
     this.bucket,
-    required Widget child,
-  }) : assert(child != null),
-       super(key: key, child: child);
+    required super.child,
+  });
 
   /// The [RestorationBucket] that this widget will insert into the widget tree.
   ///
@@ -219,14 +269,11 @@ class RootRestorationScope extends StatefulWidget {
   ///
   /// Providing null as the [restorationId] turns off state restoration for
   /// the [child] and its descendants.
-  ///
-  /// The [child] must not be null.
   const RootRestorationScope({
-    Key? key,
+    super.key,
     required this.restorationId,
     required this.child,
-  }) : assert(child != null),
-       super(key: key);
+  });
 
   /// The widget below this widget in the tree.
   ///
@@ -253,7 +300,7 @@ class _RootRestorationScopeState extends State<RootRestorationScope> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _ancestorBucket = RestorationScope.of(context);
+    _ancestorBucket = RestorationScope.maybeOf(context);
     _loadRootBucketIfNecessary();
     _okToRenderBlankContainer ??= widget.restorationId != null && _needsRootBucketInserted;
   }
@@ -401,6 +448,13 @@ class _RootRestorationScopeState extends State<RootRestorationScope> {
 ///  * [RestorationManager], which describes how state restoration works in
 ///    Flutter.
 abstract class RestorableProperty<T> extends ChangeNotifier {
+  /// Creates a [RestorableProperty].
+  RestorableProperty(){
+    if (kFlutterMemoryAllocationsEnabled) {
+      ChangeNotifier.maybeDispatchObjectCreation(this);
+    }
+  }
+
   /// Called by the [RestorationMixin] if no restoration data is available to
   /// restore the value of the property from to obtain the default value for the
   /// property.
@@ -476,7 +530,7 @@ abstract class RestorableProperty<T> extends ChangeNotifier {
 
   @override
   void dispose() {
-    assert(_debugAssertNotDisposed());
+    assert(ChangeNotifier.debugAssertNotDisposed(this)); // FYI, This uses ChangeNotifier's _debugDisposed, not _disposed.
     _owner?._unregister(this);
     super.dispose();
     _disposed = true;
@@ -486,14 +540,12 @@ abstract class RestorableProperty<T> extends ChangeNotifier {
   String? _restorationId;
   RestorationMixin? _owner;
   void _register(String restorationId, RestorationMixin owner) {
-    assert(_debugAssertNotDisposed());
-    assert(restorationId != null);
-    assert(owner != null);
+    assert(ChangeNotifier.debugAssertNotDisposed(this));
     _restorationId = restorationId;
     _owner = owner;
   }
   void _unregister() {
-    assert(_debugAssertNotDisposed());
+    assert(ChangeNotifier.debugAssertNotDisposed(this));
     assert(_restorationId != null);
     assert(_owner != null);
     _restorationId = null;
@@ -506,28 +558,15 @@ abstract class RestorableProperty<T> extends ChangeNotifier {
   @protected
   State get state {
     assert(isRegistered);
-    assert(_debugAssertNotDisposed());
+    assert(ChangeNotifier.debugAssertNotDisposed(this));
     return _owner!;
   }
 
   /// Whether this property is currently registered with a [RestorationMixin].
   @protected
   bool get isRegistered {
-    assert(_debugAssertNotDisposed());
+    assert(ChangeNotifier.debugAssertNotDisposed(this));
     return _restorationId != null;
-  }
-
-  bool _debugAssertNotDisposed() {
-    assert(() {
-      if (_disposed) {
-        throw FlutterError(
-          'A $runtimeType was used after being disposed.\n'
-          'Once you have called dispose() on a $runtimeType, it can no longer be used.',
-        );
-      }
-      return true;
-    }());
-    return true;
   }
 }
 
@@ -739,15 +778,13 @@ mixin RestorationMixin<S extends StatefulWidget> on State<S> {
   /// unless it has been unregistered with [unregisterFromRestoration].
   @protected
   void registerForRestoration(RestorableProperty<Object?> property, String restorationId) {
-    assert(property != null);
-    assert(restorationId != null);
     assert(property._restorationId == null || (_debugDoingRestore && property._restorationId == restorationId),
            'Property is already registered under ${property._restorationId}.',
     );
     assert(_debugDoingRestore || !_properties.keys.map((RestorableProperty<Object?> r) => r._restorationId).contains(restorationId),
            '"$restorationId" is already registered to another property.',
     );
-    final bool hasSerializedValue = bucket?.contains(restorationId) == true;
+    final bool hasSerializedValue = bucket?.contains(restorationId) ?? false;
     final Object? initialValue = hasSerializedValue
         ? property.fromPrimitives(bucket!.read<Object>(restorationId))
         : property.createDefaultValue();
@@ -755,8 +792,9 @@ mixin RestorationMixin<S extends StatefulWidget> on State<S> {
     if (!property.isRegistered) {
       property._register(restorationId, this);
       void listener() {
-        if (bucket == null)
+        if (bucket == null) {
           return;
+        }
         _updateProperty(property);
       }
       property.addListener(listener);
@@ -792,7 +830,6 @@ mixin RestorationMixin<S extends StatefulWidget> on State<S> {
   /// restoration data by calling this method.
   @protected
   void unregisterFromRestoration(RestorableProperty<Object?> property) {
-    assert(property != null);
     assert(property._owner == this);
     _bucket?.remove<Object?>(property._restorationId!);
     _unregister(property);
@@ -808,7 +845,7 @@ mixin RestorationMixin<S extends StatefulWidget> on State<S> {
     // There's nothing to do if:
     //  - We don't have a parent to claim a bucket from.
     //  - Our current bucket already uses the provided restoration ID.
-    //  - There's a restore pending, which means that didUpdateDependencies
+    //  - There's a restore pending, which means that didChangeDependencies
     //    will be called and we handle the rename there.
     if (_currentParent == null || _bucket?.restorationId == restorationId || restorePending) {
       return;
@@ -849,8 +886,8 @@ mixin RestorationMixin<S extends StatefulWidget> on State<S> {
     if (restorationId == null) {
       return false;
     }
-    final RestorationBucket? potentialNewParent = RestorationScope.of(context);
-    return potentialNewParent != _currentParent && potentialNewParent?.isReplacing == true;
+    final RestorationBucket? potentialNewParent = RestorationScope.maybeOf(context);
+    return potentialNewParent != _currentParent && (potentialNewParent?.isReplacing ?? false);
   }
 
   List<RestorableProperty<Object?>>? _debugPropertiesWaitingForReregistration;
@@ -865,7 +902,7 @@ mixin RestorationMixin<S extends StatefulWidget> on State<S> {
 
     final RestorationBucket? oldBucket = _bucket;
     final bool needsRestore = restorePending;
-    _currentParent = RestorationScope.of(context);
+    _currentParent = RestorationScope.maybeOf(context);
 
     final bool didReplaceBucket = _updateBucketIfNecessary(parent: _currentParent, restorePending: needsRestore);
 
@@ -919,10 +956,8 @@ mixin RestorationMixin<S extends StatefulWidget> on State<S> {
       return didReplace;
     }
     assert(restorationId != null);
-    assert(parent != null);
     if (restorePending || _bucket == null) {
       final RestorationBucket newBucket = parent.claimChild(restorationId!, debugOwner: this);
-      assert(newBucket != null);
       final bool didReplace = _setNewBucketIfNecessary(newBucket: newBucket, restorePending: restorePending);
       assert(_bucket == newBucket);
       return didReplace;

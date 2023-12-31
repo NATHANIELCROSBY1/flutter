@@ -11,16 +11,16 @@ message Remote {
 enum ReleasePhase {
   // Release was started with `conductor start` and repositories cloned.
   APPLY_ENGINE_CHERRYPICKS = 0;
-  CODESIGN_ENGINE_BINARIES = 1;
+
+  // Verify engine CI is green before opening framework PR.
+  VERIFY_ENGINE_CI = 1;
+
   APPLY_FRAMEWORK_CHERRYPICKS = 2;
 
   // Git tag applied to framework RC branch HEAD and pushed upstream.
   PUBLISH_VERSION = 3;
 
-  // RC branch HEAD pushed to upstream release branch.
-  //
-  // For example, flutter-1.2-candidate.3 -> upstream/beta
-  PUBLISH_CHANNEL = 4;
+  reserved 4; // Formerly PUBLISH_CHANNEL, merged into PUBLISH_VERSION.
 
   // Package artifacts verified to exist on cloud storage.
   VERIFY_RELEASE = 5;
@@ -43,6 +43,24 @@ enum CherrypickState {
 
   // The cherrypick will NOT be applied in this release.
   ABANDONED = 3;
+}
+
+// The type of release that is being created.
+//
+// This determines how the version will be calculated.
+enum ReleaseType {
+  // All pre-release metadata from previous beta releases will be discarded. The
+  // z must be 0.
+  STABLE_INITIAL = 0;
+
+  // Increment z.
+  STABLE_HOTFIX = 1;
+
+  // Compute x, y, and m from the candidate branch name. z and n should be 0.
+  BETA_INITIAL = 2;
+
+  // Increment n.
+  BETA_HOTFIX = 3;
 }
 
 message Cherrypick {
@@ -113,6 +131,5 @@ message ConductorState {
   // that created the [ConductorState] object.
   string conductorVersion = 10;
 
-  // One of x, y, z, m, or n.
-  string incrementLevel = 11;
+  ReleaseType releaseType = 11;
 }

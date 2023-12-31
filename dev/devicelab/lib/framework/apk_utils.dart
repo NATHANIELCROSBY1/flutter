@@ -107,7 +107,7 @@ String get _androidHome {
   final String? androidHome = Platform.environment['ANDROID_HOME'] ??
       Platform.environment['ANDROID_SDK_ROOT'];
   if (androidHome == null || androidHome.isEmpty) {
-    throw Exception('Environment variable `ANDROID_SDK_ROOT` is not set.');
+    throw Exception('Environment variable `ANDROID_HOME` is not set.');
   }
   return androidHome;
 }
@@ -274,26 +274,6 @@ android {
     ''');
   }
 
-  Future<void> addGlobalBuildType(String name, {required String initWith}) async {
-    final File buildScript = File(
-      path.join(androidPath, 'build.gradle'),
-    );
-
-    buildScript.openWrite(mode: FileMode.append).write('''
-subprojects {
-  afterEvaluate {
-    android {
-        buildTypes {
-            $name {
-                initWith $initWith
-            }
-        }
-    }
-  }
-}
-    ''');
-  }
-
   /// Adds a plugin to the pubspec.
   /// In pubspec, each dependency is expressed as key, value pair joined by a colon `:`.
   /// such as `plugin_a`:`^0.0.1` or `plugin_a`:`\npath: /some/path`.
@@ -305,6 +285,20 @@ subprojects {
       '${platformLineSep}dependencies:$platformLineSep  $plugin: $value$platformLineSep',
     );
     pubspec.writeAsStringSync(content, flush: true);
+  }
+
+  Future<void> setMinSdkVersion(int sdkVersion) async {
+    final File buildScript = File(
+      path.join(androidPath, 'app', 'build.gradle'),
+    );
+
+    buildScript.openWrite(mode: FileMode.append).write('''
+android {
+    defaultConfig {
+        minSdkVersion $sdkVersion
+    }
+}
+    ''');
   }
 
   Future<void> getPackages() async {
@@ -430,8 +424,9 @@ Future<void> _runGradleTask({
     print('stderr:');
     print(result.stderr);
   }
-  if (result.exitCode != 0)
+  if (result.exitCode != 0) {
     throw 'Gradle exited with error';
+  }
 }
 
 Future<ProcessResult> _resultOfGradleTask({
@@ -442,8 +437,9 @@ Future<ProcessResult> _resultOfGradleTask({
   section('Find Java');
   final String? javaHome = await findJavaHome();
 
-  if (javaHome == null)
+  if (javaHome == null) {
     throw TaskResult.failure('Could not find Java');
+  }
 
   print('\nUsing JAVA_HOME=$javaHome');
 

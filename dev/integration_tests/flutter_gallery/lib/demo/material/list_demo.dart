@@ -21,7 +21,7 @@ enum _MaterialListType {
 }
 
 class ListDemo extends StatefulWidget {
-  const ListDemo({ Key? key }) : super(key: key);
+  const ListDemo({ super.key });
 
   static const String routeName = '/material/list';
 
@@ -32,7 +32,7 @@ class ListDemo extends StatefulWidget {
 class _ListDemoState extends State<ListDemo> {
   static final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
-  PersistentBottomSheetController<void>? _bottomSheet;
+  PersistentBottomSheetController? _bottomSheet;
   _MaterialListType? _itemType = _MaterialListType.threeLine;
   bool? _dense = false;
   bool? _showAvatars = true;
@@ -51,7 +51,7 @@ class _ListDemoState extends State<ListDemo> {
   }
 
   void _showConfigurationSheet() {
-    final PersistentBottomSheetController<void> bottomSheet = scaffoldKey.currentState!.showBottomSheet<void>((BuildContext bottomSheetContext) {
+    final PersistentBottomSheetController bottomSheet = scaffoldKey.currentState!.showBottomSheet((BuildContext bottomSheetContext) {
       return Container(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: Colors.black26)),
@@ -212,20 +212,18 @@ class _ListDemoState extends State<ListDemo> {
       case _MaterialListType.oneLine:
       case _MaterialListType.oneLineWithAvatar:
         itemTypeText = 'Single-line';
-        break;
       case _MaterialListType.twoLine:
         itemTypeText = 'Two-line';
-        break;
       case _MaterialListType.threeLine:
         itemTypeText = 'Three-line';
-        break;
       case null:
         break;
     }
 
     Iterable<Widget> listTiles = items.map<Widget>((String item) => buildListTile(context, item));
-    if (_showDividers != null)
+    if (_showDividers != null) {
       listTiles = ListTile.divideTiles(context: context, tiles: listTiles);
+    }
 
     return Scaffold(
       key: scaffoldKey,
@@ -256,6 +254,7 @@ class _ListDemoState extends State<ListDemo> {
       ),
       body: Scrollbar(
         child: ListView(
+          primary: true,
           padding: EdgeInsets.symmetric(vertical: _dense != null ? 4.0 : 8.0),
           children: listTiles.toList(),
         ),

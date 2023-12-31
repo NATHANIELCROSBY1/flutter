@@ -5,8 +5,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../rendering/mock_canvas.dart';
-
 void main() {
   testWidgets('Theme.wrap()', (WidgetTester tester) async {
     const Color primaryColor = Color(0xFF00FF00);
@@ -99,6 +97,7 @@ void main() {
 
     Widget buildFrame() {
       return MaterialApp(
+        theme: ThemeData(useMaterial3: false),
         home: Scaffold(
           body: PopupMenuTheme(
             data: const PopupMenuThemeData(
@@ -607,99 +606,5 @@ void main() {
     await tester.pumpAndSettle(); // route animation
     expect(getTextColor('selected'), isNot(selectedButtonColor));
     expect(getTextColor('unselected'), isNot(buttonColor));
-
   });
-
-  testWidgets('ButtonTheme.wrap()', (WidgetTester tester) async {
-    const Color buttonColor = Color(0xFF00FF00);
-    const Color disabledButtonColor = Color(0xFFFF0000);
-
-    final Widget buttons = Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const RaisedButton(onPressed: null, child: Text('disabled')),
-            RaisedButton(child: const Text('enabled'), onPressed: () { }),
-          ],
-        ),
-      ),
-    );
-
-    late BuildContext navigatorContext;
-
-    Widget buildFrame() {
-      return MaterialApp(
-        home: Scaffold(
-          body: ButtonTheme.fromButtonThemeData(
-            data: const ButtonThemeData(
-              buttonColor: buttonColor,
-              disabledColor: disabledButtonColor,
-            ),
-            child: Builder( // Introduce a context so the shadow ButtonTheme is visible to captureAll().
-              builder: (BuildContext context) {
-                navigatorContext = context;
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      RaisedButton(
-                        child: const Text('push unwrapped'),
-                        onPressed: () {
-                          Navigator.of(context).push<void>(
-                            MaterialPageRoute<void>(
-                              // The slider will see the default ButtonTheme when built.
-                              builder: (BuildContext _) => buttons,
-                            ),
-                          );
-                        },
-                      ),
-                      RaisedButton(
-                        child: const Text('push wrapped'),
-                        onPressed: () {
-                          Navigator.of(context).push<void>(
-                            MaterialPageRoute<void>(
-                              // Capture the shadow toggleButtons.
-                              builder: (BuildContext _) => InheritedTheme.captureAll(context, buttons),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-    }
-
-    Color getButtonColor(String text) {
-      return tester.widget<Material>(
-        find.descendant(
-          of: find.widgetWithText(RawMaterialButton, text),
-          matching: find.byType(Material),
-        ),
-      ).color!;
-    }
-
-    await tester.pumpWidget(buildFrame());
-
-    // Show a route which contains toggleButtons.
-    await tester.tap(find.text('push wrapped'));
-    await tester.pumpAndSettle(); // route animation
-    expect(getButtonColor('disabled'), disabledButtonColor);
-    expect(getButtonColor('enabled'), buttonColor);
-
-    Navigator.of(navigatorContext).pop();
-    await tester.pumpAndSettle(); // route animation
-
-    await tester.tap(find.text('push unwrapped'));
-    await tester.pumpAndSettle(); // route animation
-    expect(getButtonColor('disabled'), isNot(disabledButtonColor));
-    expect(getButtonColor('enabled'), isNot(buttonColor));
-
-  });
-
 }

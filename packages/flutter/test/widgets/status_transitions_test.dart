@@ -7,10 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 class TestStatusTransitionWidget extends StatusTransitionWidget {
   const TestStatusTransitionWidget({
-    Key? key,
+    super.key,
     required this.builder,
-    required Animation<double> animation,
-  }) : super(key: key, animation: animation);
+    required super.animation,
+  });
 
   final WidgetBuilder builder;
 
@@ -25,6 +25,7 @@ void main() {
       duration: const Duration(seconds: 1),
       vsync: const TestVSync(),
     );
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(TestStatusTransitionWidget(
       animation: controller,
@@ -62,6 +63,7 @@ void main() {
       duration: const Duration(seconds: 1),
       vsync: const TestVSync(),
     );
+    addTearDown(anotherController.dispose);
 
     await tester.pumpWidget(TestStatusTransitionWidget(
       animation: anotherController,

@@ -14,6 +14,9 @@ class NewGalleryPerfTest extends PerfTest {
     this.galleryDir, {
     String timelineFileName = 'transitions',
     String dartDefine = '',
+    super.enableImpeller,
+    super.timeoutSeconds,
+    super.forceOpenGLES,
   }) : super(
     galleryDir.path,
     'test_driver/transitions_perf.dart',

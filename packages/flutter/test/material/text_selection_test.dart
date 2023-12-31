@@ -5,6 +5,7 @@
 // This file is run as part of a reduced test set in CI on Mac and Windows
 // machines.
 @Tags(<String>['reduced-test-set'])
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -19,7 +20,7 @@ void main() {
   final MockClipboard mockClipboard = MockClipboard();
 
   setUp(() async {
-    TestDefaultBinaryMessengerBinding.instance!.defaultBinaryMessenger
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           SystemChannels.platform,
           mockClipboard.handleMethodCall,
@@ -30,7 +31,7 @@ void main() {
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance!.defaultBinaryMessenger.setMockMethodCallHandler(
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       null,
     );
@@ -44,11 +45,15 @@ void main() {
     }) {
       final TextEditingController controller = TextEditingController(text: text)
         ..selection = selection ?? const TextSelection.collapsed(offset: -1);
+      addTearDown(controller.dispose);
+      final FocusNode focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+
       return MaterialApp(
         home: EditableText(
           key: key,
           controller: controller,
-          focusNode: FocusNode(),
+          focusNode: focusNode,
           style: const TextStyle(),
           cursorColor: Colors.black,
           backgroundCursorColor: Colors.black,
@@ -95,6 +100,7 @@ void main() {
   group('Text selection menu overflow (Android)', () {
     testWidgets('All menu items show when they fit.', (WidgetTester tester) async {
       final TextEditingController controller = TextEditingController(text: 'abc def ghi');
+      addTearDown(controller.dispose);
       await tester.pumpWidget(MaterialApp(
         theme: ThemeData(platform: TargetPlatform.android),
         home: Directionality(
@@ -157,10 +163,11 @@ void main() {
 
     testWidgets("When menu items don't fit, an overflow menu is used.", (WidgetTester tester) async {
       // Set the screen size to more narrow, so that Select all can't fit.
-      tester.binding.window.physicalSizeTestValue = const Size(1000, 800);
-      addTearDown(tester.binding.window.clearPhysicalSizeTestValue);
+      tester.view.physicalSize = const Size(1000, 800);
+      addTearDown(tester.view.reset);
 
       final TextEditingController controller = TextEditingController(text: 'abc def ghi');
+      addTearDown(controller.dispose);
       await tester.pumpWidget(MaterialApp(
         theme: ThemeData(platform: TargetPlatform.android),
         home: Directionality(
@@ -231,10 +238,11 @@ void main() {
 
     testWidgets('A smaller menu bumps more items to the overflow menu.', (WidgetTester tester) async {
       // Set the screen size so narrow that only Cut and Copy can fit.
-      tester.binding.window.physicalSizeTestValue = const Size(800, 800);
-      addTearDown(tester.binding.window.clearPhysicalSizeTestValue);
+      tester.view.physicalSize = const Size(800, 800);
+      addTearDown(tester.view.reset);
 
       final TextEditingController controller = TextEditingController(text: 'abc def ghi');
+      addTearDown(controller.dispose);
       await tester.pumpWidget(MaterialApp(
         theme: ThemeData(platform: TargetPlatform.android),
         home: Directionality(
@@ -296,10 +304,11 @@ void main() {
 
     testWidgets('When the menu renders below the text, the overflow menu back button is at the top.', (WidgetTester tester) async {
       // Set the screen size to more narrow, so that Select all can't fit.
-      tester.binding.window.physicalSizeTestValue = const Size(1000, 800);
-      addTearDown(tester.binding.window.clearPhysicalSizeTestValue);
+      tester.view.physicalSize = const Size(1000, 800);
+      addTearDown(tester.view.reset);
 
       final TextEditingController controller = TextEditingController(text: 'abc def ghi');
+      addTearDown(controller.dispose);
       await tester.pumpWidget(MaterialApp(
         theme: ThemeData(platform: TargetPlatform.android),
         home: Directionality(
@@ -370,12 +379,13 @@ void main() {
 
     testWidgets('When the menu items change, the menu is closed and _closedWidth reset.', (WidgetTester tester) async {
       // Set the screen size to more narrow, so that Select all can't fit.
-      tester.binding.window.physicalSizeTestValue = const Size(1000, 800);
-      addTearDown(tester.binding.window.clearPhysicalSizeTestValue);
+      tester.view.physicalSize = const Size(1000, 800);
+      addTearDown(tester.view.reset);
 
       final TextEditingController controller = TextEditingController(text: 'abc def ghi');
+      addTearDown(controller.dispose);
       await tester.pumpWidget(MaterialApp(
-        theme: ThemeData(platform: TargetPlatform.android),
+        theme: ThemeData(platform: TargetPlatform.android, useMaterial3: false),
         home: Directionality(
           textDirection: TextDirection.ltr,
           child: MediaQuery(
@@ -396,8 +406,9 @@ void main() {
       expect(find.text('Cut'), findsNothing);
       expect(find.text('Copy'), findsNothing);
       expect(find.text('Paste'), findsNothing);
+      expect(find.text('Share'), findsNothing);
       expect(find.text('Select all'), findsNothing);
-      expect(find.byType(IconButton), findsNothing);
+      expect(find.byType(IconButton), findsNothing); // 'More' button.
 
       // Tap to place the cursor and tap again to show the menu without a
       // selection.
@@ -415,6 +426,7 @@ void main() {
       expect(find.text('Cut'), findsNothing);
       expect(find.text('Copy'), findsNothing);
       expect(find.text('Paste'), findsOneWidget);
+      expect(find.text('Share'), findsNothing);
       expect(find.text('Select all'), findsOneWidget);
       expect(find.byType(IconButton), findsNothing);
 
@@ -425,8 +437,9 @@ void main() {
       expect(find.text('Cut'), findsOneWidget);
       expect(find.text('Copy'), findsOneWidget);
       expect(find.text('Paste'), findsOneWidget);
+      expect(find.text('Share'), findsNothing);
       expect(find.text('Select all'), findsNothing);
-      expect(find.byType(IconButton), findsNothing);
+      expect(find.byType(IconButton), findsOneWidget); // 'More' button.
       final Offset cutOffset = tester.getTopLeft(find.text('Cut'));
 
       // Tap to clear the selection.
@@ -436,37 +449,39 @@ void main() {
       expect(find.text('Copy'), findsNothing);
       expect(find.text('Paste'), findsNothing);
       expect(find.text('Select all'), findsNothing);
-      expect(find.byType(IconButton), findsNothing);
+      expect(find.byType(IconButton), findsNothing); // 'More' button.
 
       // Long press to show the menu.
       await tester.longPressAt(textOffsetToPosition(tester, 1));
       await tester.pumpAndSettle();
 
-      // The last button is missing, and a more button is shown.
+      // The last buttons (share and select all) are missing, and a more button is shown.
       expect(find.text('Cut'), findsOneWidget);
       expect(find.text('Copy'), findsOneWidget);
       expect(find.text('Paste'), findsOneWidget);
+      expect(find.text('Share'), findsNothing);
       expect(find.text('Select all'), findsNothing);
-      expect(find.byType(IconButton), findsOneWidget);
+      expect(find.byType(IconButton), findsOneWidget); // 'More' button.
 
-      // Tapping the button shows the overflow menu.
+      // Tapping the more button shows the overflow menu.
       await tester.tap(find.byType(IconButton));
       await tester.pumpAndSettle();
       expect(find.text('Cut'), findsNothing);
       expect(find.text('Copy'), findsNothing);
       expect(find.text('Paste'), findsNothing);
+      expect(find.text('Share'), findsOneWidget);
       expect(find.text('Select all'), findsOneWidget);
-      expect(find.byType(IconButton), findsOneWidget);
+      expect(find.byType(IconButton), findsOneWidget); // Back button.
 
-      // Tapping Select all changes the menu items so that there is no no longer
-      // any overflow.
+      // Tapping 'Select all' closes the overflow menu.
       await tester.tap(find.text('Select all'));
       await tester.pumpAndSettle();
       expect(find.text('Cut'), findsOneWidget);
       expect(find.text('Copy'), findsOneWidget);
       expect(find.text('Paste'), findsOneWidget);
+      expect(find.text('Share'), findsNothing);
       expect(find.text('Select all'), findsNothing);
-      expect(find.byType(IconButton), findsNothing);
+      expect(find.byType(IconButton), findsOneWidget); // 'More' button.
       final Offset newCutOffset = tester.getTopLeft(find.text('Cut'));
       expect(newCutOffset, equals(cutOffset));
     },
@@ -478,6 +493,7 @@ void main() {
   group('menu position', () {
     testWidgets('When renders below a block of text, menu appears below bottom endpoint', (WidgetTester tester) async {
       final TextEditingController controller = TextEditingController(text: 'abc\ndef\nghi\njkl\nmno\npqr');
+      addTearDown(controller.dispose);
       await tester.pumpWidget(MaterialApp(
         theme: ThemeData(platform: TargetPlatform.android),
         home: Directionality(
@@ -545,6 +561,83 @@ void main() {
       expect(cutOffset.dy, greaterThan(bottomHandlePos.dy));
     },
       skip: isBrowser, // [intended] We do not use Flutter-rendered context menu on the Web.
+      variant: const TargetPlatformVariant(<TargetPlatform>{ TargetPlatform.android }),
+    );
+
+    testWidgets(
+      'When selecting multiple lines over max lines',
+      (WidgetTester tester) async {
+        final TextEditingController controller =
+            TextEditingController(text: 'abc\ndef\nghi\njkl\nmno\npqr');
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.android),
+          home: Directionality(
+            textDirection: TextDirection.ltr,
+            child: MediaQuery(
+              data: const MediaQueryData(size: Size(800.0, 600.0)),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Material(
+                  child: TextField(
+                    decoration: const InputDecoration(contentPadding: EdgeInsets.all(8.0)),
+                    style: const TextStyle(fontSize: 32, height: 1),
+                    maxLines: 2,
+                    controller: controller,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ));
+
+        // Initially, the menu isn't shown at all.
+        expect(find.text('Cut'), findsNothing);
+        expect(find.text('Copy'), findsNothing);
+        expect(find.text('Paste'), findsNothing);
+        expect(find.text('Select all'), findsNothing);
+        expect(find.byType(IconButton), findsNothing);
+
+        // Tap to place the cursor in the field, then tap the handle to show the
+        // selection menu.
+        await tester.tap(find.byType(TextField));
+        await tester.pumpAndSettle();
+        final RenderEditable renderEditable = findRenderEditable(tester);
+        final List<TextSelectionPoint> endpoints = globalize(
+          renderEditable.getEndpointsForSelection(controller.selection),
+          renderEditable,
+        );
+        expect(endpoints.length, 1);
+        final Offset handlePos = endpoints[0].point + const Offset(0.0, 1.0);
+        await tester.tapAt(handlePos, pointer: 7);
+        await tester.pumpAndSettle();
+        expect(find.text('Cut'), findsNothing);
+        expect(find.text('Copy'), findsNothing);
+        expect(find.text('Paste'), findsOneWidget);
+        expect(find.text('Select all'), findsOneWidget);
+        expect(find.byType(IconButton), findsNothing);
+
+        // Tap to select all.
+        await tester.tap(find.text('Select all'));
+        await tester.pumpAndSettle();
+
+        // Only Cut, Copy, and Paste are shown.
+        expect(find.text('Cut'), findsOneWidget);
+        expect(find.text('Copy'), findsOneWidget);
+        expect(find.text('Paste'), findsOneWidget);
+        expect(find.text('Select all'), findsNothing);
+        expect(find.byType(IconButton), findsNothing);
+
+        // The menu appears at the top of the visible selection.
+        final Offset selectionOffset = tester
+            .getTopLeft(find.byType(TextSelectionToolbarTextButton).first);
+        final Offset textFieldOffset =
+            tester.getTopLeft(find.byType(TextField));
+
+        // 44.0 + 8.0 - 8.0 = _kToolbarHeight + _kToolbarContentDistance - contentPadding
+        expect(selectionOffset.dy + 44.0 + 8.0 - 8.0, equals(textFieldOffset.dy));
+      },
+      skip: isBrowser, // [intended] the selection menu isn't required by web
       variant: const TargetPlatformVariant(<TargetPlatform>{ TargetPlatform.android }),
     );
   });
@@ -621,6 +714,7 @@ void main() {
     final TextEditingController controller = TextEditingController(
       text: 'Atwater Peel Sherbrooke Bonaventure',
     );
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
         home: Material(

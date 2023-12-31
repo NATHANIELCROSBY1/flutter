@@ -2,13 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-library component1;
-
 import 'package:flutter/material.dart';
 
 
 class LogoScreen extends StatelessWidget {
-  const LogoScreen({Key? key}) : super(key: key);
+  const LogoScreen({super.key});
 
   static const String _testSentinel = 'Running deferred code';
 

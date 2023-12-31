@@ -5,7 +5,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
@@ -14,6 +13,11 @@ void main() {
   test('BottomNavigationBarThemeData copyWith, ==, hashCode basics', () {
     expect(const BottomNavigationBarThemeData(), const BottomNavigationBarThemeData().copyWith());
     expect(const BottomNavigationBarThemeData().hashCode, const BottomNavigationBarThemeData().copyWith().hashCode);
+  });
+
+  test('BottomNavigationBarThemeData lerp special cases', () {
+    const BottomNavigationBarThemeData data = BottomNavigationBarThemeData();
+    expect(identical(BottomNavigationBarThemeData.lerp(data, data, 0.5), data), true);
   });
 
   test('BottomNavigationBarThemeData defaults', () {
@@ -151,13 +155,27 @@ void main() {
       ),
     );
 
+    final Finder findACTransform = find.descendant(
+      of: find.byType(BottomNavigationBar),
+      matching: find.ancestor(
+        of: find.text('AC'),
+        matching: find.byType(Transform),
+      ),
+    );
+    final Finder findAlarmTransform = find.descendant(
+      of: find.byType(BottomNavigationBar),
+      matching: find.ancestor(
+        of: find.text('Alarm'),
+        matching: find.byType(Transform),
+      ),
+    );
     final TextStyle selectedFontStyle = tester.renderObject<RenderParagraph>(find.text('AC')).text.style!;
     final TextStyle selectedIcon = _iconStyle(tester, Icons.ac_unit);
     final TextStyle unselectedIcon = _iconStyle(tester, Icons.access_alarm);
     expect(selectedFontStyle.fontSize, selectedFontStyle.fontSize);
     // Unselected label has a font size of 22 but is scaled down to be font size 21.
     expect(
-      tester.firstWidget<Transform>(find.ancestor(of: find.text('Alarm'), matching: find.byType(Transform))).transform,
+      tester.firstWidget<Transform>(findAlarmTransform).transform,
       equals(Matrix4.diagonal3(Vector3.all(unselectedTextStyle.fontSize! / selectedTextStyle.fontSize!))),
     );
     expect(selectedIcon.color, equals(selectedItemColor));
@@ -179,17 +197,10 @@ void main() {
     expect(_material(tester).elevation, equals(elevation));
     expect(_material(tester).color, equals(backgroundColor));
 
-    final Offset selectedBarItem = tester.getCenter(
-      find.ancestor(of: find.text('AC'),
-      matching: find.byType(Transform))
-    );
-    final Offset unselectedBarItem = tester.getCenter(
-      find.ancestor(of: find.text('Alarm'),
-      matching: find.byType(Transform))
-    );
+    final Offset selectedBarItem = tester.getCenter(findACTransform);
+    final Offset unselectedBarItem = tester.getCenter(findAlarmTransform);
     final TestGesture gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer();
-    addTearDown(gesture.removePointer);
     await gesture.moveTo(selectedBarItem);
     await tester.pumpAndSettle();
     expect(RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.grab);
@@ -270,13 +281,27 @@ void main() {
       ),
     );
 
+    Finder findDescendantOfBottomNavigationBar(Finder finder) {
+      return find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: finder,
+      );
+    }
+
     final TextStyle selectedFontStyle = tester.renderObject<RenderParagraph>(find.text('AC')).text.style!;
     final TextStyle selectedIcon = _iconStyle(tester, Icons.ac_unit);
     final TextStyle unselectedIcon = _iconStyle(tester, Icons.access_alarm);
     expect(selectedFontStyle.fontSize, selectedFontStyle.fontSize);
     // Unselected label has a font size of 22 but is scaled down to be font size 21.
     expect(
-      tester.firstWidget<Transform>(find.ancestor(of: find.text('Alarm'), matching: find.byType(Transform))).transform,
+      tester.firstWidget<Transform>(
+        findDescendantOfBottomNavigationBar(
+          find.ancestor(
+            of: find.text('Alarm'),
+            matching: find.byType(Transform),
+          ),
+        ),
+      ).transform,
       equals(Matrix4.diagonal3(Vector3.all(unselectedTextStyle.fontSize! / selectedTextStyle.fontSize!))),
     );
     expect(selectedIcon.color, equals(selectedItemColor));
@@ -285,13 +310,11 @@ void main() {
     expect(unselectedIcon.fontSize, equals(unselectedIconTheme.size));
     // There should not be any [Opacity] or [FadeTransition] widgets
     // since showUnselectedLabels and showSelectedLabels are true.
-    final Finder findOpacity = find.descendant(
-      of: find.byType(BottomNavigationBar),
-      matching: find.byType(Opacity),
+    final Finder findOpacity = findDescendantOfBottomNavigationBar(
+      find.byType(Opacity),
     );
-    final Finder findFadeTransition = find.descendant(
-      of: find.byType(BottomNavigationBar),
-      matching: find.byType(FadeTransition),
+    final Finder findFadeTransition = findDescendantOfBottomNavigationBar(
+      find.byType(FadeTransition),
     );
     expect(findOpacity, findsNothing);
     expect(findFadeTransition, findsNothing);
@@ -299,12 +322,15 @@ void main() {
     expect(_material(tester).color, equals(backgroundColor));
 
     final Offset barItem = tester.getCenter(
-      find.ancestor(of: find.text('AC'),
-      matching: find.byType(Transform))
+      findDescendantOfBottomNavigationBar(
+        find.ancestor(
+          of: find.text('AC'),
+          matching: find.byType(Transform),
+        ),
+      ),
     );
     final TestGesture gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer();
-    addTearDown(gesture.removePointer);
     await gesture.moveTo(barItem);
     await tester.pumpAndSettle();
     expect(RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.text);
@@ -338,14 +364,14 @@ void main() {
     );
 
 
-    final Finder findOpacity = find.descendant(
+    final Finder findVisibility = find.descendant(
       of: find.byType(BottomNavigationBar),
-      matching: find.byType(Opacity),
+      matching: find.byType(Visibility),
     );
 
-    expect(findOpacity, findsNWidgets(2));
-    expect(tester.widget<Opacity>(findOpacity.at(0)).opacity, 0.0);
-    expect(tester.widget<Opacity>(findOpacity.at(1)).opacity, 0.0);
+    expect(findVisibility, findsNWidgets(2));
+    expect(tester.widget<Visibility>(findVisibility.at(0)).visible, false);
+    expect(tester.widget<Visibility>(findVisibility.at(1)).visible, false);
   });
 
   testWidgets('BottomNavigationBarTheme can be used to hide selected labels', (WidgetTester tester) async {

@@ -9,83 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-typedef PostInvokeCallback = void Function({Action<Intent> action, Intent intent, ActionDispatcher dispatcher});
-
-class TestIntent extends Intent {
-  const TestIntent();
-}
-
-class SecondTestIntent extends TestIntent {
-  const SecondTestIntent();
-}
-
-class ThirdTestIntent extends SecondTestIntent {
-  const ThirdTestIntent();
-}
-
-class TestAction extends CallbackAction<TestIntent> {
-  TestAction({
-    required OnInvokeCallback onInvoke,
-  })  : assert(onInvoke != null),
-        super(onInvoke: onInvoke);
-
-  @override
-  bool isEnabled(TestIntent intent) => enabled;
-
-  bool get enabled => _enabled;
-  bool _enabled = true;
-  set enabled(bool value) {
-    if (_enabled == value) {
-      return;
-    }
-    _enabled = value;
-    notifyActionListeners();
-  }
-
-  @override
-  void addActionListener(ActionListenerCallback listener) {
-    super.addActionListener(listener);
-    listeners.add(listener);
-  }
-
-  @override
-  void removeActionListener(ActionListenerCallback listener) {
-    super.removeActionListener(listener);
-    listeners.remove(listener);
-  }
-  List<ActionListenerCallback> listeners = <ActionListenerCallback>[];
-
-  void _testInvoke(TestIntent intent) => invoke(intent);
-}
-
-class TestDispatcher extends ActionDispatcher {
-  const TestDispatcher({this.postInvoke});
-
-  final PostInvokeCallback? postInvoke;
-
-  @override
-  Object? invokeAction(Action<Intent> action, Intent intent, [BuildContext? context]) {
-    final Object? result = super.invokeAction(action, intent, context);
-    postInvoke?.call(action: action, intent: intent, dispatcher: this);
-    return result;
-  }
-}
-
-class TestDispatcher1 extends TestDispatcher {
-  const TestDispatcher1({PostInvokeCallback? postInvoke}) : super(postInvoke: postInvoke);
-}
-
 void main() {
-  testWidgets('CallbackAction passes correct intent when invoked.', (WidgetTester tester) async {
-    late Intent passedIntent;
-    final TestAction action = TestAction(onInvoke: (Intent intent) {
-      passedIntent = intent;
-      return true;
-    });
-    const TestIntent intent = TestIntent();
-    action._testInvoke(intent);
-    expect(passedIntent, equals(intent));
-  });
   group(ActionDispatcher, () {
     testWidgets('ActionDispatcher invokes actions when asked.', (WidgetTester tester) async {
       await tester.pumpWidget(Container());
@@ -104,6 +28,7 @@ void main() {
       expect(invoked, isTrue);
     });
   });
+
   group(Actions, () {
     Intent? invokedIntent;
     Action<Intent>? invokedAction;
@@ -149,6 +74,7 @@ void main() {
       expect(result, isTrue);
       expect(invoked, isTrue);
     });
+
     testWidgets('Actions widget can invoke actions with default dispatcher and maybeInvoke', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       bool invoked = false;
@@ -175,6 +101,7 @@ void main() {
       expect(result, isTrue);
       expect(invoked, isTrue);
     });
+
     testWidgets('maybeInvoke returns null when no action is found', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       bool invoked = false;
@@ -196,11 +123,12 @@ void main() {
       await tester.pump();
       final Object? result = Actions.maybeInvoke(
         containerKey.currentContext!,
-        DoNothingIntent(),
+        const DoNothingIntent(),
       );
       expect(result, isNull);
       expect(invoked, isFalse);
     });
+
     testWidgets('invoke throws when no action is found', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       bool invoked = false;
@@ -222,11 +150,12 @@ void main() {
       await tester.pump();
       final Object? result = Actions.maybeInvoke(
         containerKey.currentContext!,
-        DoNothingIntent(),
+        const DoNothingIntent(),
       );
       expect(result, isNull);
       expect(invoked, isFalse);
     });
+
     testWidgets('Actions widget can invoke actions with custom dispatcher', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       bool invoked = false;
@@ -257,6 +186,7 @@ void main() {
       expect(invoked, isTrue);
       expect(invokedIntent, equals(intent));
     });
+
     testWidgets('Actions can invoke actions in ancestor dispatcher', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       bool invoked = false;
@@ -293,6 +223,7 @@ void main() {
       expect(invokedAction, equals(testAction));
       expect(invokedDispatcher.runtimeType, equals(TestDispatcher1));
     });
+
     testWidgets("Actions can invoke actions in ancestor dispatcher if a lower one isn't specified", (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       bool invoked = false;
@@ -328,6 +259,7 @@ void main() {
       expect(invokedAction, equals(testAction));
       expect(invokedDispatcher.runtimeType, equals(TestDispatcher1));
     });
+
     testWidgets('Actions widget can be found with of', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       final ActionDispatcher testDispatcher = TestDispatcher1(postInvoke: collect);
@@ -344,6 +276,7 @@ void main() {
       final ActionDispatcher dispatcher = Actions.of(containerKey.currentContext!);
       expect(dispatcher, equals(testDispatcher));
     });
+
     testWidgets('Action can be found with find', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       final ActionDispatcher testDispatcher = TestDispatcher1(postInvoke: collect);
@@ -390,6 +323,7 @@ void main() {
       expect(() => Actions.find<DoNothingIntent>(containerKey.currentContext!), throwsAssertionError);
       expect(Actions.maybeFind<DoNothingIntent>(containerKey.currentContext!), isNull);
     });
+
     testWidgets('FocusableActionDetector keeps track of focus and hover even when disabled.', (WidgetTester tester) async {
       FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
       final GlobalKey containerKey = GlobalKey();
@@ -404,6 +338,8 @@ void main() {
       );
       bool hovering = false;
       bool focusing = false;
+
+      addTearDown(focusNode.dispose);
 
       Future<void> buildTest(bool enabled) async {
         await tester.pumpWidget(
@@ -434,7 +370,6 @@ void main() {
       focusNode.requestFocus();
       await tester.pump();
       final TestGesture gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      addTearDown(gesture.removePointer);
       await gesture.moveTo(tester.getCenter(find.byKey(containerKey)));
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -460,6 +395,7 @@ void main() {
       expect(hovering, isFalse);
       expect(focusing, isFalse);
     });
+
     testWidgets('FocusableActionDetector changes mouse cursor when hovered', (WidgetTester tester) async {
       await tester.pumpWidget(
         MouseRegion(
@@ -474,7 +410,6 @@ void main() {
       );
       final TestGesture gesture = await tester.createGesture(kind: PointerDeviceKind.mouse, pointer: 1);
       await gesture.addPointer(location: const Offset(1, 1));
-      addTearDown(gesture.removePointer);
       await tester.pump();
 
       expect(RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.text);
@@ -493,6 +428,7 @@ void main() {
 
       expect(RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.forbidden);
     });
+
     testWidgets('Actions.invoke returns the value of Action.invoke', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       final Object sentinel = Object();
@@ -523,6 +459,7 @@ void main() {
       expect(identical(result, sentinel), isTrue);
       expect(invoked, isTrue);
     });
+
     testWidgets('ContextAction can return null', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       const TestIntent intent = TestIntent();
@@ -549,6 +486,7 @@ void main() {
       expect(invokedDispatcher.runtimeType, equals(TestDispatcher1));
       expect(testAction.capturedContexts.single, containerKey.currentContext);
     });
+
     testWidgets('Disabled actions stop propagation to an ancestor', (WidgetTester tester) async {
       final GlobalKey containerKey = GlobalKey();
       bool invoked = false;
@@ -820,6 +758,10 @@ void main() {
       );
     });
 
+    tearDown(() async {
+      focusNode.dispose();
+    });
+
     testWidgets('FocusableActionDetector keeps track of focus and hover even when disabled.', (WidgetTester tester) async {
       FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
       final GlobalKey containerKey = GlobalKey();
@@ -828,7 +770,6 @@ void main() {
       focusNode.requestFocus();
       await tester.pump();
       final TestGesture gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      addTearDown(gesture.removePointer);
       await gesture.moveTo(tester.getCenter(find.byKey(containerKey)));
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -854,6 +795,7 @@ void main() {
       expect(hovering, isFalse);
       expect(focusing, isFalse);
     });
+
     testWidgets('FocusableActionDetector shows focus highlight appropriately when focused and disabled', (WidgetTester tester) async {
       FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
       final GlobalKey containerKey = GlobalKey();
@@ -884,6 +826,7 @@ void main() {
       await tester.pump();
       expect(focusing, isTrue);
     });
+
     testWidgets('FocusableActionDetector can be used without callbacks', (WidgetTester tester) async {
       FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
       final GlobalKey containerKey = GlobalKey();
@@ -892,7 +835,6 @@ void main() {
       focusNode.requestFocus();
       await tester.pump();
       final TestGesture gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      addTearDown(gesture.removePointer);
       await gesture.moveTo(tester.getCenter(find.byKey(containerKey)));
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -924,13 +866,15 @@ void main() {
       (WidgetTester tester) async {
         final FocusNode buttonNode = FocusNode(debugLabel: 'Test');
 
+        addTearDown(buttonNode.dispose);
+
         await tester.pumpWidget(
           MaterialApp(
             home: FocusableActionDetector(
-              child: MaterialButton(
+              child: ElevatedButton(
+                onPressed: () {},
                 focusNode: buttonNode,
                 child: const Text('Test'),
-                onPressed: () {},
               ),
             ),
           ),
@@ -946,10 +890,10 @@ void main() {
           MaterialApp(
             home: FocusableActionDetector(
               descendantsAreFocusable: false,
-              child: MaterialButton(
+              child: ElevatedButton(
+                onPressed: () {},
                 focusNode: buttonNode,
                 child: const Text('Test'),
-                onPressed: () {},
               ),
             ),
           ),
@@ -968,21 +912,29 @@ void main() {
           (WidgetTester tester) async {
         final FocusNode buttonNode1 = FocusNode(debugLabel: 'Button Node 1');
         final FocusNode buttonNode2 = FocusNode(debugLabel: 'Button Node 2');
+        final FocusNode skipTraversalNode = FocusNode(skipTraversal: true);
+
+        addTearDown(() {
+          buttonNode1.dispose();
+          buttonNode2.dispose();
+          skipTraversalNode.dispose();
+        });
 
         await tester.pumpWidget(
           MaterialApp(
             home: FocusableActionDetector(
+              focusNode: skipTraversalNode,
               child: Column(
                 children: <Widget>[
-                  MaterialButton(
+                  ElevatedButton(
+                    onPressed: () {},
                     focusNode: buttonNode1,
                     child: const Text('Node 1'),
-                    onPressed: () {},
                   ),
-                  MaterialButton(
+                  ElevatedButton(
+                    onPressed: () {},
                     focusNode: buttonNode2,
                     child: const Text('Node 2'),
-                    onPressed: () {},
                   ),
                 ],
               ),
@@ -1002,18 +954,19 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: FocusableActionDetector(
+              focusNode: skipTraversalNode,
               descendantsAreTraversable: false,
               child: Column(
                 children: <Widget>[
-                  MaterialButton(
+                  ElevatedButton(
+                    onPressed: () {},
                     focusNode: buttonNode1,
                     child: const Text('Node 1'),
-                    onPressed: () {},
                   ),
-                  MaterialButton(
+                  ElevatedButton(
+                    onPressed: () {},
                     focusNode: buttonNode2,
                     child: const Text('Node 2'),
-                    onPressed: () {},
                   ),
                 ],
               ),
@@ -1027,10 +980,148 @@ void main() {
         expect(buttonNode2.hasFocus, isFalse);
         primaryFocus!.nextFocus();
         await tester.pump();
-        expect(buttonNode1.hasFocus, isTrue);
+        expect(buttonNode1.hasFocus, isFalse);
         expect(buttonNode2.hasFocus, isFalse);
       },
     );
+
+    testWidgets('FocusableActionDetector can exclude Focus semantics', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FocusableActionDetector(
+            child: Column(
+              children: <Widget>[
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('Button 1'),
+                ),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('Button 2'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSemantics(find.byType(FocusableActionDetector)),
+        matchesSemantics(
+          scopesRoute: true,
+          children: <Matcher>[
+            // This semantic is from `Focus` widget under `FocusableActionDetector`.
+            matchesSemantics(
+              isFocusable: true,
+              children: <Matcher>[
+                matchesSemantics(
+                  hasTapAction: true,
+                  isButton: true,
+                  hasEnabledState: true,
+                  isEnabled: true,
+                  isFocusable: true,
+                  label: 'Button 1',
+                  textDirection: TextDirection.ltr,
+                ),
+                matchesSemantics(
+                  hasTapAction: true,
+                  isButton: true,
+                  hasEnabledState: true,
+                  isEnabled: true,
+                  isFocusable: true,
+                  label: 'Button 2',
+                  textDirection: TextDirection.ltr,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      // Set `includeFocusSemantics` to false to exclude semantics
+      // from `Focus` widget under `FocusableActionDetector`.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FocusableActionDetector(
+            includeFocusSemantics: false,
+            child: Column(
+              children: <Widget>[
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('Button 1'),
+                ),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('Button 2'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Semantics from the `Focus` widget will be removed.
+      expect(
+        tester.getSemantics(find.byType(FocusableActionDetector)),
+        matchesSemantics(
+          scopesRoute: true,
+          children: <Matcher>[
+            matchesSemantics(
+              hasTapAction: true,
+              isButton: true,
+              hasEnabledState: true,
+              isEnabled: true,
+              isFocusable: true,
+              label: 'Button 1',
+              textDirection: TextDirection.ltr,
+            ),
+            matchesSemantics(
+              hasTapAction: true,
+              isButton: true,
+              hasEnabledState: true,
+              isEnabled: true,
+              isFocusable: true,
+              label: 'Button 2',
+              textDirection: TextDirection.ltr,
+            ),
+          ],
+        ),
+      );
+    });
+  });
+
+  group('Action subclasses', () {
+    testWidgets('CallbackAction passes correct intent when invoked.', (WidgetTester tester) async {
+      late Intent passedIntent;
+      final TestAction action = TestAction(onInvoke: (Intent intent) {
+        passedIntent = intent;
+        return true;
+      });
+      const TestIntent intent = TestIntent();
+      action._testInvoke(intent);
+      expect(passedIntent, equals(intent));
+    });
+
+    testWidgets('VoidCallbackAction', (WidgetTester tester) async {
+      bool called = false;
+      void testCallback() {
+        called = true;
+      }
+      final VoidCallbackAction action = VoidCallbackAction();
+      final VoidCallbackIntent intent = VoidCallbackIntent(testCallback);
+      action.invoke(intent);
+      expect(called, isTrue);
+    });
+    testWidgets('Base Action class default toKeyEventResult delegates to consumesKey', (WidgetTester tester) async {
+      expect(
+        DefaultToKeyEventResultAction(consumesKey: false).toKeyEventResult(const DefaultToKeyEventResultIntent(), null),
+        KeyEventResult.skipRemainingHandlers,
+      );
+      expect(
+        DefaultToKeyEventResultAction(consumesKey: true).toKeyEventResult(const DefaultToKeyEventResultIntent(), null),
+        KeyEventResult.handled,
+      );
+    });
   });
 
   group('Diagnostics', () {
@@ -1049,6 +1140,7 @@ void main() {
 
       expect(description, isEmpty);
     });
+
     testWidgets('default Actions debugFillProperties', (WidgetTester tester) async {
       final DiagnosticPropertiesBuilder builder = DiagnosticPropertiesBuilder();
 
@@ -1066,9 +1158,15 @@ void main() {
         .toList();
 
       expect(description.length, equals(2));
-      expect(description[0], equalsIgnoringHashCodes('dispatcher: ActionDispatcher#00000'));
-      expect(description[1], equals('actions: {}'));
+      expect(
+        description,
+        equalsIgnoringHashCodes(<String>[
+          'dispatcher: ActionDispatcher#00000',
+          'actions: {}',
+        ]),
+      );
     });
+
     testWidgets('Actions implements debugFillProperties', (WidgetTester tester) async {
       final DiagnosticPropertiesBuilder builder = DiagnosticPropertiesBuilder();
 
@@ -1089,8 +1187,13 @@ void main() {
           .toList();
 
       expect(description.length, equals(2));
-      expect(description[0], equalsIgnoringHashCodes('dispatcher: ActionDispatcher#00000'));
-      expect(description[1], equalsIgnoringHashCodes('actions: {TestIntent: TestAction#00000}'));
+      expect(
+        description,
+        equalsIgnoringHashCodes(<String>[
+          'dispatcher: ActionDispatcher#00000',
+          'actions: {TestIntent: TestAction#00000}',
+        ]),
+      );
     });
   });
 
@@ -1470,7 +1573,7 @@ void main() {
                   setState = stateSetter;
                   return Actions(
                     actions: <Type, Action<Intent>> {
-                      if (action2LookupContext != null) LogIntent: Action<LogIntent>.overridable(defaultAction: LogInvocationAction(actionName: 'action2'), context: action2LookupContext!)
+                      if (action2LookupContext != null) LogIntent: Action<LogIntent>.overridable(defaultAction: LogInvocationAction(actionName: 'action2'), context: action2LookupContext!),
                     },
                     child: Builder(
                       builder: (BuildContext context3) {
@@ -1579,7 +1682,7 @@ void main() {
                                 context: context2,
                               ),
                               context: context3,
-                            )
+                            ),
                           },
                           child: Builder(
                             builder: (BuildContext context4) {
@@ -1766,6 +1869,71 @@ void main() {
   });
 }
 
+typedef PostInvokeCallback = void Function({Action<Intent> action, Intent intent, ActionDispatcher dispatcher});
+
+class TestIntent extends Intent {
+  const TestIntent();
+}
+
+class SecondTestIntent extends TestIntent {
+  const SecondTestIntent();
+}
+
+class ThirdTestIntent extends SecondTestIntent {
+  const ThirdTestIntent();
+}
+
+class TestAction extends CallbackAction<TestIntent> {
+  TestAction({
+    required OnInvokeCallback onInvoke,
+  })  : super(onInvoke: onInvoke);
+
+  @override
+  bool isEnabled(TestIntent intent) => enabled;
+
+  bool get enabled => _enabled;
+  bool _enabled = true;
+  set enabled(bool value) {
+    if (_enabled == value) {
+      return;
+    }
+    _enabled = value;
+    notifyActionListeners();
+  }
+
+  @override
+  void addActionListener(ActionListenerCallback listener) {
+    super.addActionListener(listener);
+    listeners.add(listener);
+  }
+
+  @override
+  void removeActionListener(ActionListenerCallback listener) {
+    super.removeActionListener(listener);
+    listeners.remove(listener);
+  }
+  List<ActionListenerCallback> listeners = <ActionListenerCallback>[];
+
+  void _testInvoke(TestIntent intent) => invoke(intent);
+}
+
+class TestDispatcher extends ActionDispatcher {
+  const TestDispatcher({this.postInvoke});
+
+  final PostInvokeCallback? postInvoke;
+
+  @override
+  Object? invokeAction(Action<Intent> action, Intent intent, [BuildContext? context]) {
+    final Object? result = super.invokeAction(action, intent, context);
+    postInvoke?.call(action: action, intent: intent, dispatcher: this);
+    return result;
+  }
+}
+
+class TestDispatcher1 extends TestDispatcher {
+  const TestDispatcher1({super.postInvoke});
+}
+
 class TestContextAction extends ContextAction<TestIntent> {
   List<BuildContext?> capturedContexts = <BuildContext?>[];
 
@@ -1843,7 +2011,7 @@ class LogInvocationContextAction extends ContextAction<LogIntent> {
 }
 
 class LogInvocationButDeferIsEnabledAction extends LogInvocationAction {
-  LogInvocationButDeferIsEnabledAction({ required String actionName }) : super(actionName: actionName);
+  LogInvocationButDeferIsEnabledAction({ required super.actionName });
 
   // Defer `isActionEnabled` to the overridable action.
   @override
@@ -1852,13 +2020,31 @@ class LogInvocationButDeferIsEnabledAction extends LogInvocationAction {
 
 class RedirectOutputAction extends LogInvocationAction {
   RedirectOutputAction({
-      required String actionName,
-      bool enabled = true,
+      required super.actionName,
+      super.enabled,
       required this.newLog,
-  }) : super(actionName: actionName, enabled: enabled);
+  });
 
   final List<String> newLog;
 
   @override
   void invoke(LogIntent intent) => super.invoke(LogIntent(log: newLog));
+}
+
+class DefaultToKeyEventResultIntent extends Intent {
+  const DefaultToKeyEventResultIntent();
+}
+
+class DefaultToKeyEventResultAction extends Action<DefaultToKeyEventResultIntent> {
+  DefaultToKeyEventResultAction({
+    required bool consumesKey
+  }) : _consumesKey = consumesKey;
+
+  final bool _consumesKey;
+
+  @override
+  bool consumesKey(DefaultToKeyEventResultIntent intent) => _consumesKey;
+
+  @override
+  void invoke(DefaultToKeyEventResultIntent intent) {}
 }

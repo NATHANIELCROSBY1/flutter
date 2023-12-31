@@ -18,7 +18,7 @@ enum _ReorderableListType {
 }
 
 class ReorderableListDemo extends StatefulWidget {
-  const ReorderableListDemo({ Key? key }) : super(key: key);
+  const ReorderableListDemo({ super.key });
 
   static const String routeName = '/material/reorderable-list';
 
@@ -37,7 +37,7 @@ class _ListItem {
 class _ListDemoState extends State<ReorderableListDemo> {
   static final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
-  PersistentBottomSheetController<void>? _bottomSheet;
+  PersistentBottomSheetController? _bottomSheet;
   _ReorderableListType? _itemType = _ReorderableListType.threeLine;
   bool? _reverse = false;
   bool _reverseSort = false;
@@ -71,7 +71,7 @@ class _ListDemoState extends State<ReorderableListDemo> {
 
   void _showConfigurationSheet() {
     setState(() {
-      _bottomSheet = scaffoldKey.currentState!.showBottomSheet<void>((BuildContext bottomSheetContext) {
+      _bottomSheet = scaffoldKey.currentState!.showBottomSheet((BuildContext bottomSheetContext) {
         return DecoratedBox(
           decoration: const BoxDecoration(
             border: Border(top: BorderSide(color: Colors.black26)),
@@ -143,7 +143,6 @@ class _ListDemoState extends State<ReorderableListDemo> {
           subtitle: secondary,
           secondary: const Icon(Icons.drag_handle),
         );
-        break;
       case _ReorderableListType.horizontalAvatar:
       case _ReorderableListType.verticalAvatar:
         listTile = SizedBox(
@@ -155,12 +154,10 @@ class _ListDemoState extends State<ReorderableListDemo> {
             child: Text(item.value),
           ),
         );
-        break;
       case null:
         listTile = Container(
           key: Key(item.value),
         );
-        break;
     }
 
     return listTile;
@@ -208,10 +205,11 @@ class _ListDemoState extends State<ReorderableListDemo> {
       ),
       body: Scrollbar(
         child: ReorderableListView(
+          primary: true,
           header: _itemType != _ReorderableListType.threeLine
               ? Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: Text('Header of the list', style: Theme.of(context).textTheme.headline5))
+                  child: Text('Header of the list', style: Theme.of(context).textTheme.headlineSmall))
               : null,
           onReorder: _onReorder,
           reverse: _reverse!,

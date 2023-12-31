@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
 import 'dart:async';
 import 'dart:collection';
 import 'dart:ui' as ui show PointerDataPacket;
@@ -19,6 +18,16 @@ import 'pointer_router.dart';
 import 'pointer_signal_resolver.dart';
 import 'resampler.dart';
 
+export 'dart:ui' show Offset;
+
+export 'package:flutter/foundation.dart' show DiagnosticsNode, InformationCollector;
+
+export 'arena.dart' show GestureArenaManager;
+export 'events.dart' show PointerEvent;
+export 'hit_test.dart' show HitTestEntry, HitTestResult, HitTestTarget;
+export 'pointer_router.dart' show PointerRouter;
+export 'pointer_signal_resolver.dart' show PointerSignalResolver;
+
 typedef _HandleSampleTimeChangedCallback = void Function();
 
 /// Class that implements clock used for sampling.
@@ -27,7 +36,13 @@ class SamplingClock {
   DateTime now() => DateTime.now();
 
   /// Returns a new stopwatch that uses the current time as reported by `this`.
-  Stopwatch stopwatch() => Stopwatch();
+  ///
+  /// See also:
+  ///
+  ///   * [GestureBinding.debugSamplingClock], which is used in tests and
+  ///     debug builds to observe [FakeAsync].
+  Stopwatch stopwatch() => Stopwatch(); // flutter_ignore: stopwatch (see analyze.dart)
+  // Ignore context: This is replaced by debugSampling clock in the test binding.
 }
 
 // Class that handles resampling of touch events for multiple pointer
@@ -50,7 +65,8 @@ class _Resampler {
   Duration _frameTime = Duration.zero;
 
   // Time since `_frameTime` was updated.
-  Stopwatch _frameTimeAge = Stopwatch();
+  Stopwatch _frameTimeAge = Stopwatch(); // flutter_ignore: stopwatch (see analyze.dart)
+  // Ignore context: This is tested safely outside of FakeAsync.
 
   // Last sample time and time stamp of last event.
   //
@@ -73,8 +89,6 @@ class _Resampler {
   // Add `event` for resampling or dispatch it directly if
   // not a touch event.
   void addOrDispatch(PointerEvent event) {
-    final SchedulerBinding scheduler = SchedulerBinding.instance;
-    assert(scheduler != null);
     // Add touch event to resampler or dispatch pointer event directly.
     if (event.kind == PointerDeviceKind.touch) {
       // Save last event time for debugPrint of resampling margin.
@@ -98,7 +112,6 @@ class _Resampler {
   // The `samplingClock` is the clock used to determine frame time age.
   void sample(Duration samplingOffset, SamplingClock clock) {
     final SchedulerBinding scheduler = SchedulerBinding.instance;
-    assert(scheduler != null);
 
     // Initialize `_frameTime` if needed. This will be used for periodic
     // sampling when frame callbacks are not received.
@@ -169,7 +182,7 @@ class _Resampler {
         _timer = Timer.periodic(_samplingInterval, (_) => _onSampleTimeChanged());
         // Trigger an immediate sample time change.
         _onSampleTimeChanged();
-      });
+      }, debugLabel: 'Resampler.startTimer');
     }
   }
 
@@ -180,6 +193,7 @@ class _Resampler {
     }
     _resamplers.clear();
     _frameTime = Duration.zero;
+    _timer?.cancel();
   }
 
   void _onSampleTimeChanged() {
@@ -257,7 +271,7 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
   void initInstances() {
     super.initInstances();
     _instance = this;
-    window.onPointerDataPacket = _handlePointerDataPacket;
+    platformDispatcher.onPointerDataPacket = _handlePointerDataPacket;
   }
 
   /// The singleton instance of this object.
@@ -279,9 +293,23 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
   void _handlePointerDataPacket(ui.PointerDataPacket packet) {
     // We convert pointer data to logical pixels so that e.g. the touch slop can be
     // defined in a device-independent manner.
-    _pendingPointerEvents.addAll(PointerEventConverter.expand(packet.data, window.devicePixelRatio));
-    if (!locked)
-      _flushPointerEventQueue();
+    try {
+      _pendingPointerEvents.addAll(PointerEventConverter.expand(packet.data, _devicePixelRatioForView));
+      if (!locked) {
+        _flushPointerEventQueue();
+      }
+    } catch (error, stack) {
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'gestures library',
+        context: ErrorDescription('while handling a pointer data packet'),
+      ));
+    }
+  }
+
+  double? _devicePixelRatioForView(int viewId) {
+    return platformDispatcher.view(id: viewId)?.devicePixelRatio;
   }
 
   /// Dispatch a [PointerCancelEvent] for the given pointer soon.
@@ -289,16 +317,18 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
   /// The pointer event will be dispatched before the next pointer event and
   /// before the end of the microtask but not within this function call.
   void cancelPointer(int pointer) {
-    if (_pendingPointerEvents.isEmpty && !locked)
+    if (_pendingPointerEvents.isEmpty && !locked) {
       scheduleMicrotask(_flushPointerEventQueue);
+    }
     _pendingPointerEvents.addFirst(PointerCancelEvent(pointer: pointer));
   }
 
   void _flushPointerEventQueue() {
     assert(!locked);
 
-    while (_pendingPointerEvents.isNotEmpty)
+    while (_pendingPointerEvents.isNotEmpty) {
       handlePointerEvent(_pendingPointerEvents.removeFirst());
+    }
   }
 
   /// A router that routes all pointer events received from the engine.
@@ -314,8 +344,18 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
 
   /// State for all pointers which are currently down.
   ///
-  /// The state of hovering pointers is not tracked because that would require
-  /// hit-testing on every frame.
+  /// This map caches the hit test result done when the pointer goes down
+  /// ([PointerDownEvent] and [PointerPanZoomStartEvent]). This hit test result
+  /// will be used throughout the entire pointer interaction; that is, the
+  /// pointer is seen as pointing to the same place even if it has moved away
+  /// until pointer goes up ([PointerUpEvent] and [PointerPanZoomEndEvent]).
+  /// This matches the expected gesture interaction with a button, and allows
+  /// devices that don't support hovering to perform as few hit tests as
+  /// possible.
+  ///
+  /// On the other hand, hovering requires hit testing on almost every frame.
+  /// This is handled in [RendererBinding] and [MouseTracker], and will ignore
+  /// the results cached here.
   final Map<int, HitTestResult> _hitTests = <int, HitTestResult>{};
 
   /// Dispatch an event to the targets found by a hit test on its position.
@@ -333,7 +373,7 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
 
     if (resamplingEnabled) {
       _resampler.addOrDispatch(event);
-      _resampler.sample(samplingOffset, _samplingClock);
+      _resampler.sample(samplingOffset, samplingClock);
       return;
     }
 
@@ -345,21 +385,22 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
 
   void _handlePointerEventImmediately(PointerEvent event) {
     HitTestResult? hitTestResult;
-    if (event is PointerDownEvent || event is PointerSignalEvent || event is PointerHoverEvent) {
-      assert(!_hitTests.containsKey(event.pointer));
+    if (event is PointerDownEvent || event is PointerSignalEvent || event is PointerHoverEvent || event is PointerPanZoomStartEvent) {
+      assert(!_hitTests.containsKey(event.pointer), 'Pointer of ${event.toString(minLevel: DiagnosticLevel.debug)} unexpectedly has a HitTestResult associated with it.');
       hitTestResult = HitTestResult();
-      hitTest(hitTestResult, event.position);
-      if (event is PointerDownEvent) {
+      hitTestInView(hitTestResult, event.position, event.viewId);
+      if (event is PointerDownEvent || event is PointerPanZoomStartEvent) {
         _hitTests[event.pointer] = hitTestResult;
       }
       assert(() {
-        if (debugPrintHitTestResults)
-          debugPrint('$event: $hitTestResult');
+        if (debugPrintHitTestResults) {
+          debugPrint('${event.toString(minLevel: DiagnosticLevel.debug)}: $hitTestResult');
+        }
         return true;
       }());
-    } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+    } else if (event is PointerUpEvent || event is PointerCancelEvent || event is PointerPanZoomEndEvent) {
       hitTestResult = _hitTests.remove(event.pointer);
-    } else if (event.down) {
+    } else if (event.down || event is PointerPanZoomUpdateEvent) {
       // Because events that occur with the pointer down (like
       // [PointerMoveEvent]s) should be dispatched to the same place that their
       // initial PointerDownEvent was, we want to re-use the path we found when
@@ -368,22 +409,32 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
       hitTestResult = _hitTests[event.pointer];
     }
     assert(() {
-      if (debugPrintMouseHoverEvents && event is PointerHoverEvent)
+      if (debugPrintMouseHoverEvents && event is PointerHoverEvent) {
         debugPrint('$event');
+      }
       return true;
     }());
     if (hitTestResult != null ||
         event is PointerAddedEvent ||
         event is PointerRemovedEvent) {
-      assert(event.position != null);
       dispatchEvent(event, hitTestResult);
     }
   }
 
-  /// Determine which [HitTestTarget] objects are located at a given position.
+  /// Determine which [HitTestTarget] objects are located at a given position in
+  /// the specified view.
   @override // from HitTestable
-  void hitTest(HitTestResult result, Offset position) {
+  void hitTestInView(HitTestResult result, Offset position, int viewId) {
     result.add(HitTestEntry(this));
+  }
+
+  @override // from HitTestable
+  @Deprecated(
+    'Use hitTestInView and specify the view to hit test. '
+    'This feature was deprecated after v3.11.0-20.0.pre.',
+  )
+  void hitTest(HitTestResult result, Offset position) {
+    hitTestInView(result, position, platformDispatcher.implicitView!.viewId);
   }
 
   /// Dispatch an event to [pointerRouter] and the path of a hit test result.
@@ -398,9 +449,9 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
   @pragma('vm:notify-debugger-on-exception')
   void dispatchEvent(PointerEvent event, HitTestResult? hitTestResult) {
     assert(!locked);
-    // No hit test information implies that this is a [PointerHoverEvent],
-    // [PointerAddedEvent], or [PointerRemovedEvent]. These events are specially
-    // routed here; other events will be routed through the `handleEvent` below.
+    // No hit test information implies that this is a [PointerAddedEvent] or
+    // [PointerRemovedEvent]. These events are specially routed here; other
+    // events will be routed through the `handleEvent` below.
     if (hitTestResult == null) {
       assert(event is PointerAddedEvent || event is PointerRemovedEvent);
       try {
@@ -442,9 +493,9 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
   @override // from HitTestTarget
   void handleEvent(PointerEvent event, HitTestEntry entry) {
     pointerRouter.route(event);
-    if (event is PointerDownEvent) {
+    if (event is PointerDownEvent || event is PointerPanZoomStartEvent) {
       gestureArena.close(event.pointer);
-    } else if (event is PointerUpEvent) {
+    } else if (event is PointerUpEvent || event is PointerPanZoomEndEvent) {
       gestureArena.sweep(event.pointer);
     } else if (event is PointerSignalEvent) {
       pointerSignalResolver.resolve(event);
@@ -461,16 +512,10 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
     _hitTests.clear();
   }
 
-  /// Overrides the sampling clock for debugging and testing.
-  ///
-  /// This value is ignored in non-debug builds.
-  @protected
-  SamplingClock? get debugSamplingClock => null;
-
   void _handleSampleTimeChanged() {
     if (!locked) {
       if (resamplingEnabled) {
-        _resampler.sample(samplingOffset, _samplingClock);
+        _resampler.sample(samplingOffset, samplingClock);
       }
       else {
         _resampler.stop();
@@ -478,12 +523,24 @@ mixin GestureBinding on BindingBase implements HitTestable, HitTestDispatcher, H
     }
   }
 
-  SamplingClock get _samplingClock {
+  /// Overrides the sampling clock for debugging and testing.
+  ///
+  /// This value is ignored in non-debug builds.
+  @protected
+  SamplingClock? get debugSamplingClock => null;
+
+  /// Provides access to the current [DateTime] and `StopWatch` objects for
+  /// sampling.
+  ///
+  /// Overridden by [debugSamplingClock] for debug builds and testing. Using
+  /// this object under test will maintain synchronization with [FakeAsync].
+  SamplingClock get samplingClock {
     SamplingClock value = SamplingClock();
     assert(() {
       final SamplingClock? debugValue = debugSamplingClock;
-      if (debugValue != null)
+      if (debugValue != null) {
         value = debugValue;
+      }
       return true;
     }());
     return value;
@@ -526,22 +583,15 @@ class FlutterErrorDetailsForPointerEventDispatcher extends FlutterErrorDetails {
   /// The gesture library calls this constructor when catching an exception
   /// that will subsequently be reported using [FlutterError.onError].
   const FlutterErrorDetailsForPointerEventDispatcher({
-    required Object exception,
-    StackTrace? stack,
-    String? library,
-    DiagnosticsNode? context,
+    required super.exception,
+    super.stack,
+    super.library,
+    super.context,
     this.event,
     this.hitTestEntry,
-    InformationCollector? informationCollector,
-    bool silent = false,
-  }) : super(
-    exception: exception,
-    stack: stack,
-    library: library,
-    context: context,
-    informationCollector: informationCollector,
-    silent: silent,
-  );
+    super.informationCollector,
+    super.silent,
+  });
 
   /// The pointer event that was being routed when the exception was raised.
   final PointerEvent? event;

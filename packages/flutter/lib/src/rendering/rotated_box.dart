@@ -4,6 +4,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 import 'box.dart';
@@ -19,13 +20,10 @@ const double _kQuarterTurnsInRadians = math.pi / 2.0;
 /// rotated box consumes only as much space as required by the rotated child.
 class RenderRotatedBox extends RenderBox with RenderObjectWithChildMixin<RenderBox> {
   /// Creates a rotated render box.
-  ///
-  /// The [quarterTurns] argument must not be null.
   RenderRotatedBox({
     required int quarterTurns,
     RenderBox? child,
-  }) : assert(quarterTurns != null),
-       _quarterTurns = quarterTurns {
+  }) : _quarterTurns = quarterTurns {
     this.child = child;
   }
 
@@ -33,9 +31,9 @@ class RenderRotatedBox extends RenderBox with RenderObjectWithChildMixin<RenderB
   int get quarterTurns => _quarterTurns;
   int _quarterTurns;
   set quarterTurns(int value) {
-    assert(value != null);
-    if (_quarterTurns == value)
+    if (_quarterTurns == value) {
       return;
+    }
     _quarterTurns = value;
     markNeedsLayout();
   }
@@ -44,36 +42,41 @@ class RenderRotatedBox extends RenderBox with RenderObjectWithChildMixin<RenderB
 
   @override
   double computeMinIntrinsicWidth(double height) {
-    if (child == null)
+    if (child == null) {
       return 0.0;
+    }
     return _isVertical ? child!.getMinIntrinsicHeight(height) : child!.getMinIntrinsicWidth(height);
   }
 
   @override
   double computeMaxIntrinsicWidth(double height) {
-    if (child == null)
+    if (child == null) {
       return 0.0;
+    }
     return _isVertical ? child!.getMaxIntrinsicHeight(height) : child!.getMaxIntrinsicWidth(height);
   }
 
   @override
   double computeMinIntrinsicHeight(double width) {
-    if (child == null)
+    if (child == null) {
       return 0.0;
+    }
     return _isVertical ? child!.getMinIntrinsicWidth(width) : child!.getMinIntrinsicHeight(width);
   }
 
   @override
   double computeMaxIntrinsicHeight(double width) {
-    if (child == null)
+    if (child == null) {
       return 0.0;
+    }
     return _isVertical ? child!.getMaxIntrinsicWidth(width) : child!.getMaxIntrinsicHeight(width);
   }
 
   Matrix4? _paintTransform;
 
   @override
-  Size computeDryLayout(BoxConstraints constraints) {
+  @protected
+  Size computeDryLayout(covariant BoxConstraints constraints) {
     if (child == null) {
       return constraints.smallest;
     }
@@ -99,8 +102,9 @@ class RenderRotatedBox extends RenderBox with RenderObjectWithChildMixin<RenderB
   @override
   bool hitTestChildren(BoxHitTestResult result, { required Offset position }) {
     assert(_paintTransform != null || debugNeedsLayout || child == null);
-    if (child == null || _paintTransform == null)
+    if (child == null || _paintTransform == null) {
       return false;
+    }
     return result.addWithPaintTransform(
       transform: _paintTransform,
       position: position,
@@ -139,8 +143,9 @@ class RenderRotatedBox extends RenderBox with RenderObjectWithChildMixin<RenderB
 
   @override
   void applyPaintTransform(RenderBox child, Matrix4 transform) {
-    if (_paintTransform != null)
+    if (_paintTransform != null) {
       transform.multiply(_paintTransform!);
+    }
     super.applyPaintTransform(child, transform);
   }
 }

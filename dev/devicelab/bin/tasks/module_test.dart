@@ -14,20 +14,43 @@ import 'package:flutter_devicelab/framework/utils.dart';
 import 'package:path/path.dart' as path;
 
 final String gradlew = Platform.isWindows ? 'gradlew.bat' : 'gradlew';
-final String gradlewExecutable = Platform.isWindows ? '.\\$gradlew' : './$gradlew';
+final String gradlewExecutable =
+    Platform.isWindows ? '.\\$gradlew' : './$gradlew';
 final String fileReadWriteMode = Platform.isWindows ? 'rw-rw-rw-' : 'rw-r--r--';
-final String platformLineSep = Platform.isWindows ? '\r\n': '\n';
+final String platformLineSep = Platform.isWindows ? '\r\n' : '\n';
+
+/// Combines several TaskFunctions with trivial success value into one.
+TaskFunction combine(List<TaskFunction> tasks) {
+  return () async {
+    for (final TaskFunction task in tasks) {
+      final TaskResult result = await task();
+      if (result.failed) {
+        return result;
+      }
+    }
+    return TaskResult.success(null);
+  };
+}
 
 /// Tests that the Flutter module project template works and supports
 /// adding Flutter to an existing Android app.
-Future<void> main() async {
-  await task(() async {
+class ModuleTest {
+  ModuleTest(
+    this.buildTarget, {
+    this.gradleVersion = '7.6.3',
+  });
 
+  final String buildTarget;
+  final String gradleVersion;
+
+  Future<TaskResult> call() async {
+    section('Running: $buildTarget');
     section('Find Java');
 
     final String? javaHome = await findJavaHome();
-    if (javaHome == null)
+    if (javaHome == null) {
       return TaskResult.failure('Could not find Java');
+    }
     print('\nUsing JAVA_HOME=$javaHome');
 
     section('Create Flutter module project');
@@ -39,6 +62,32 @@ Future<void> main() async {
         await flutter(
           'create',
           options: <String>['--org', 'io.flutter.devicelab', '--template=module', 'hello'],
+        );
+      });
+
+      section('Create package with native assets');
+
+      await flutter(
+        'config',
+        options: <String>['--enable-native-assets'],
+      );
+
+      const String ffiPackageName = 'ffi_package';
+      await createFfiPackage(ffiPackageName, tempDir);
+
+      section('Add FFI package');
+
+      final File pubspec = File(path.join(projectDir.path, 'pubspec.yaml'));
+      String content = await pubspec.readAsString();
+      content = content.replaceFirst(
+        'dependencies:$platformLineSep',
+        'dependencies:$platformLineSep  $ffiPackageName:$platformLineSep    path: ..${Platform.pathSeparator}$ffiPackageName$platformLineSep',
+      );
+      await pubspec.writeAsString(content, flush: true);
+      await inDirectory(projectDir, () async {
+        await flutter(
+          'packages',
+          options: <String>['get'],
         );
       });
 
@@ -58,12 +107,10 @@ Future<void> main() async {
       if (!Platform.isWindows) {
         await exec('chmod', <String>[
           '444',
-          readonlyTxtAssetFile.path
+          readonlyTxtAssetFile.path,
         ]);
       }
 
-      final File pubspec = File(path.join(projectDir.path, 'pubspec.yaml'));
-      String content = await pubspec.readAsString();
       content = content.replaceFirst(
         '$platformLineSep  # assets:$platformLineSep',
         '$platformLineSep  assets:$platformLineSep    - assets/read-only.txt$platformLineSep',
@@ -72,10 +119,48 @@ Future<void> main() async {
 
       section('Add plugins');
 
-      content = await pubspec.readAsString();
       content = content.replaceFirst(
         '${platformLineSep}dependencies:$platformLineSep',
         '${platformLineSep}dependencies:$platformLineSep  device_info: 2.0.3$platformLineSep  package_info: 2.0.2$platformLineSep',
+      );
+      await pubspec.writeAsString(content, flush: true);
+      await inDirectory(projectDir, () async {
+        await flutter(
+          'packages',
+          options: <String>['get'],
+        );
+      });
+
+      // TODO(dacoharkes): Implement Add2app. https://github.com/flutter/flutter/issues/129757
+      section('Check native assets error');
+
+      await inDirectory(Directory(path.join(projectDir.path, '.android')),
+          () async {
+        final StringBuffer stderr = StringBuffer();
+        final int exitCode = await exec(
+          gradlewExecutable,
+          <String>['flutter:assembleDebug'],
+          environment: <String, String>{'JAVA_HOME': javaHome},
+          canFail: true,
+          stderr: stderr,
+        );
+        const String errorString =
+            'Native assets are not yet supported in Android add2app.';
+        if (!stderr.toString().contains(errorString) || exitCode == 0) {
+          throw TaskResult.failure(
+              '''
+Expected to find `$errorString` in stderr and nonZero exit code.
+$stderr
+exitCode: $exitCode
+''');
+        }
+      });
+
+      section('Remove FFI package');
+
+      content = content.replaceFirst(
+        '  $ffiPackageName:$platformLineSep    path: ..${Platform.pathSeparator}$ffiPackageName$platformLineSep',
+        '',
       );
       await pubspec.writeAsString(content, flush: true);
       await inDirectory(projectDir, () async {
@@ -190,11 +275,25 @@ Future<void> main() async {
         hostApp,
       );
       copy(
-        File(path.join(projectDir.path, '.android', 'gradle', 'wrapper', 'gradle-wrapper.jar')),
+        File(path.join(projectDir.path, '.android', 'gradle', 'wrapper',
+            'gradle-wrapper.jar')),
         Directory(path.join(hostApp.path, 'gradle', 'wrapper')),
       );
 
-      final File analyticsOutputFile = File(path.join(tempDir.path, 'analytics.log'));
+      // Modify gradle version to passed in version.
+      // This is somehow the wrong file.
+      final File gradleWrapperProperties = File(path.join(
+          hostApp.path, 'gradle', 'wrapper', 'gradle-wrapper.properties'));
+      String propertyContent = await gradleWrapperProperties.readAsString();
+      propertyContent = propertyContent.replaceFirst(
+        'REPLACEME',
+        gradleVersion,
+      );
+      section(propertyContent);
+      await gradleWrapperProperties.writeAsString(propertyContent, flush: true);
+
+      final File analyticsOutputFile =
+          File(path.join(tempDir.path, 'analytics.log'));
 
       section('Build debug host APK');
 
@@ -263,9 +362,8 @@ Future<void> main() async {
         'app',
         'build',
         'intermediates',
-        'merged_assets',
+        'assets',
         'debug',
-        'out',
         'flutter_assets',
         'assets',
         'read-only.txt',
@@ -277,7 +375,7 @@ Future<void> main() async {
 
       String modes = readonlyDebugAssetFile.statSync().modeString();
       print('\nread-only.txt file access modes = $modes');
-      if (modes != null && modes.compareTo(fileReadWriteMode) != 0) {
+      if (modes.compareTo(fileReadWriteMode) != 0) {
         return TaskResult.failure('Failed to make assets user-readable and writable');
       }
 
@@ -325,7 +423,7 @@ Future<void> main() async {
         // Shouldn't be missing since we already checked it exists above.
         final ArchiveFile? noticesFile = apk.findFile('assets/flutter_assets/NOTICES.Z');
 
-        final Uint8List licenseData = noticesFile?.content as Uint8List;
+        final Uint8List? licenseData = noticesFile?.content as Uint8List?;
         if (licenseData == null) {
           return TaskResult.failure('Invalid license file.');
         }
@@ -353,9 +451,8 @@ Future<void> main() async {
         'app',
         'build',
         'intermediates',
-        'merged_assets',
+        'assets',
         'release',
-        'out',
         'flutter_assets',
         'assets',
         'read-only.txt',
@@ -367,7 +464,7 @@ Future<void> main() async {
 
       modes = readonlyReleaseAssetFile.statSync().modeString();
       print('\nread-only.txt file access modes = $modes');
-      if (modes != null && modes.compareTo(fileReadWriteMode) != 0) {
+      if (modes.compareTo(fileReadWriteMode) != 0) {
         return TaskResult.failure('Failed to make assets user-readable and writable');
       }
 
@@ -379,5 +476,12 @@ Future<void> main() async {
     } finally {
       rmTree(tempDir);
     }
-  });
+  }
+}
+
+Future<void> main() async {
+  await task(combine(<TaskFunction>[
+    // ignore: avoid_redundant_argument_values
+    ModuleTest('module-gradle-7.6', gradleVersion: '7.6.3').call,
+  ]));
 }

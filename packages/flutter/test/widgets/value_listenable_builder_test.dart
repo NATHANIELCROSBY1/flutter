@@ -18,8 +18,9 @@ void main() {
       child: ValueListenableBuilder<String?>(
         valueListenable: valueListenable,
         builder: (BuildContext context, String? value, Widget? child) {
-          if (value == null)
+          if (value == null) {
             return const Placeholder();
+          }
           return Text(value);
         },
       ),
@@ -31,6 +32,10 @@ void main() {
     textBuilderUnderTest = builderForValueListenable(valueListenable);
   });
 
+  tearDown(() {
+    valueListenable.dispose();
+  });
+
   testWidgets('Null value is ok', (WidgetTester tester) async {
     await tester.pumpWidget(textBuilderUnderTest);
 
@@ -38,7 +43,8 @@ void main() {
   });
 
   testWidgets('Widget builds with initial value', (WidgetTester tester) async {
-    valueListenable = SpyStringValueNotifier('Bachman');
+    final SpyStringValueNotifier valueListenable = SpyStringValueNotifier('Bachman');
+    addTearDown(valueListenable.dispose);
 
     await tester.pumpWidget(builderForValueListenable(valueListenable));
 
@@ -65,8 +71,8 @@ void main() {
     await tester.pump();
     expect(find.text('Gilfoyle'), findsOneWidget);
 
-    final ValueListenable<String?> differentListenable =
-        SpyStringValueNotifier('Hendricks');
+    final SpyStringValueNotifier differentListenable = SpyStringValueNotifier('Hendricks');
+    addTearDown(differentListenable.dispose);
 
     await tester.pumpWidget(builderForValueListenable(differentListenable));
 
@@ -81,8 +87,8 @@ void main() {
     await tester.pump();
     expect(find.text('Gilfoyle'), findsOneWidget);
 
-    final ValueListenable<String?> differentListenable =
-       SpyStringValueNotifier('Hendricks');
+    final SpyStringValueNotifier differentListenable = SpyStringValueNotifier('Hendricks');
+    addTearDown(differentListenable.dispose);
 
     await tester.pumpWidget(builderForValueListenable(differentListenable));
 
@@ -112,7 +118,7 @@ void main() {
 }
 
 class SpyStringValueNotifier extends ValueNotifier<String?> {
-  SpyStringValueNotifier(String? initialValue) : super(initialValue);
+  SpyStringValueNotifier(super.initialValue);
 
   /// Override for test visibility only.
   @override

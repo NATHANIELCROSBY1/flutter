@@ -8,7 +8,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../rendering/mock_canvas.dart';
 import '../rendering/rendering_tester.dart';
 
 void main() {
@@ -42,16 +41,43 @@ void main() {
     );
   });
 
+  test('ShapeDecoration.lerp identical a,b', () {
+    expect(ShapeDecoration.lerp(null, null, 0), null);
+    const ShapeDecoration shape = ShapeDecoration(shape: CircleBorder());
+    expect(identical(ShapeDecoration.lerp(shape, shape, 0.5), shape), true);
+  });
+
+  test('ShapeDecoration.lerp null a,b', () {
+    const Decoration a = ShapeDecoration(shape: CircleBorder());
+    const Decoration b = ShapeDecoration(shape: RoundedRectangleBorder());
+    expect(Decoration.lerp(a, null, 0.0), a);
+    expect(Decoration.lerp(null, b, 0.0), b);
+    expect(Decoration.lerp(null, null, 0.0), null);
+  });
+
   test('ShapeDecoration.lerp and hit test', () {
     const Decoration a = ShapeDecoration(shape: CircleBorder());
     const Decoration b = ShapeDecoration(shape: RoundedRectangleBorder());
+    const Decoration c = ShapeDecoration(shape: OvalBorder());
     expect(Decoration.lerp(a, b, 0.0), a);
     expect(Decoration.lerp(a, b, 1.0), b);
+    expect(Decoration.lerp(a, c, 0.0), a);
+    expect(Decoration.lerp(a, c, 1.0), c);
+    expect(Decoration.lerp(b, c, 0.0), b);
+    expect(Decoration.lerp(b, c, 1.0), c);
     const Size size = Size(200.0, 100.0); // at t=0.5, width will be 150 (x=25 to x=175).
     expect(a.hitTest(size, const Offset(20.0, 50.0)), isFalse);
+    expect(c.hitTest(size, const Offset(50, 5.0)), isFalse);
+    expect(c.hitTest(size, const Offset(5, 30.0)), isFalse);
     expect(Decoration.lerp(a, b, 0.1)!.hitTest(size, const Offset(20.0, 50.0)), isFalse);
     expect(Decoration.lerp(a, b, 0.5)!.hitTest(size, const Offset(20.0, 50.0)), isFalse);
     expect(Decoration.lerp(a, b, 0.9)!.hitTest(size, const Offset(20.0, 50.0)), isTrue);
+    expect(Decoration.lerp(a, c, 0.1)!.hitTest(size, const Offset(30.0, 50.0)), isFalse);
+    expect(Decoration.lerp(a, c, 0.5)!.hitTest(size, const Offset(30.0, 50.0)), isTrue);
+    expect(Decoration.lerp(a, c, 0.9)!.hitTest(size, const Offset(30.0, 50.0)), isTrue);
+    expect(Decoration.lerp(b, c, 0.1)!.hitTest(size, const Offset(45.0, 10.0)), isTrue);
+    expect(Decoration.lerp(b, c, 0.5)!.hitTest(size, const Offset(30.0, 10.0)), isTrue);
+    expect(Decoration.lerp(b, c, 0.9)!.hitTest(size, const Offset(10.0, 30.0)), isTrue);
     expect(b.hitTest(size, const Offset(20.0, 50.0)), isTrue);
   });
 
@@ -107,6 +133,16 @@ void main() {
     );
     expect(clipPath, isLookLikeExpectedPath);
   });
+  test('ShapeDecoration.getClipPath for oval', () {
+    const ShapeDecoration decoration = ShapeDecoration(shape: OvalBorder());
+    const Rect rect = Rect.fromLTWH(0.0, 0.0, 100.0, 50.0);
+    final Path clipPath = decoration.getClipPath(rect, TextDirection.ltr);
+    final Matcher isLookLikeExpectedPath = isPathThat(
+      includes: const <Offset>[ Offset(50.0, 10.0), ],
+      excludes: const <Offset>[ Offset(1.0, 1.0), Offset(15.0, 1.0), Offset(99.0, 19.0), ],
+    );
+    expect(clipPath, isLookLikeExpectedPath);
+  });
 }
 
 class TestImageProvider extends ImageProvider<TestImageProvider> {
@@ -120,7 +156,7 @@ class TestImageProvider extends ImageProvider<TestImageProvider> {
   }
 
   @override
-  ImageStreamCompleter load(TestImageProvider key, DecoderCallback decode) {
+  ImageStreamCompleter loadImage(TestImageProvider key, ImageDecoderCallback decode) {
     return OneFrameImageStreamCompleter(
       SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
     );

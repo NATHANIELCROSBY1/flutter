@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
+import 'package:file/memory.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
 import 'package:flutter_tools/src/base/io.dart';
 import 'package:flutter_tools/src/base/platform.dart';
@@ -23,10 +22,10 @@ import '../../src/test_flutter_command_runner.dart';
 
 void main() {
   group('UpgradeCommandRunner', () {
-    FakeUpgradeCommandRunner fakeCommandRunner;
-    UpgradeCommandRunner realCommandRunner;
-    FakeProcessManager processManager;
-    FakePlatform fakePlatform;
+    late FakeUpgradeCommandRunner fakeCommandRunner;
+    late UpgradeCommandRunner realCommandRunner;
+    late FakeProcessManager processManager;
+    late FakePlatform fakePlatform;
     const GitTagVersion gitTagVersion = GitTagVersion(
       x: 1,
       y: 2,
@@ -38,7 +37,8 @@ void main() {
 
     setUp(() {
       fakeCommandRunner = FakeUpgradeCommandRunner();
-      realCommandRunner = UpgradeCommandRunner();
+      realCommandRunner = UpgradeCommandRunner()
+          ..workingDirectory = getFlutterRoot();
       processManager = FakeProcessManager.empty();
       fakeCommandRunner.willHaveUncommittedChanges = false;
       fakePlatform = FakePlatform()..environment = Map<String, String>.unmodifiable(<String, String>{
@@ -48,7 +48,7 @@ void main() {
     });
 
     testUsingContext('throws on unknown tag, official branch,  noforce', () async {
-      final FakeFlutterVersion flutterVersion = FakeFlutterVersion(channel: 'beta');
+      final FakeFlutterVersion flutterVersion = FakeFlutterVersion(branch: 'beta');
       const String upstreamRevision = '';
       final FakeFlutterVersion latestVersion = FakeFlutterVersion(frameworkRevision: upstreamRevision);
       fakeCommandRunner.remoteVersion = latestVersion;
@@ -68,7 +68,7 @@ void main() {
     });
 
     testUsingContext('throws tool exit with uncommitted changes', () async {
-      final FakeFlutterVersion flutterVersion = FakeFlutterVersion(channel: 'beta');
+      final FakeFlutterVersion flutterVersion = FakeFlutterVersion(branch: 'beta');
       const String upstreamRevision = '';
       final FakeFlutterVersion latestVersion = FakeFlutterVersion(frameworkRevision: upstreamRevision);
       fakeCommandRunner.remoteVersion = latestVersion;
@@ -91,7 +91,7 @@ void main() {
     testUsingContext("Doesn't continue on known tag, beta branch, no force, already up-to-date", () async {
       const String revision = 'abc123';
       final FakeFlutterVersion latestVersion = FakeFlutterVersion(frameworkRevision: revision);
-      final FakeFlutterVersion flutterVersion = FakeFlutterVersion(channel: 'beta', frameworkRevision: revision);
+      final FakeFlutterVersion flutterVersion = FakeFlutterVersion(branch: 'beta', frameworkRevision: revision);
       fakeCommandRunner.alreadyUpToDate = true;
       fakeCommandRunner.remoteVersion = latestVersion;
 
@@ -118,7 +118,7 @@ void main() {
       const String upstreamVersion = '4.5.6';
 
       final FakeFlutterVersion flutterVersion = FakeFlutterVersion(
-        channel: 'beta',
+        branch: 'beta',
         frameworkRevision: revision,
         frameworkRevisionShort: revision,
         frameworkVersion: version,
@@ -157,10 +157,10 @@ void main() {
 
       processManager.addCommands(<FakeCommand>[
         const FakeCommand(command: <String>[
-          'git', 'fetch', '--tags'
+          'git', 'fetch', '--tags',
         ]),
         const FakeCommand(command: <String>[
-          'git', 'rev-parse', '--verify', '@{u}',
+          'git', 'rev-parse', '--verify', '@{upstream}',
         ],
         stdout: revision),
         const FakeCommand(command: <String>[
@@ -185,13 +185,13 @@ void main() {
     testUsingContext('fetchLatestVersion throws toolExit if HEAD is detached', () async {
       processManager.addCommands(const <FakeCommand>[
         FakeCommand(command: <String>[
-          'git', 'fetch', '--tags'
+          'git', 'fetch', '--tags',
         ]),
         FakeCommand(
-          command: <String>['git', 'rev-parse', '--verify', '@{u}'],
+          command: <String>['git', 'rev-parse', '--verify', '@{upstream}'],
           exception: ProcessException(
             'git',
-            <String>['rev-parse', '--verify', '@{u}'],
+            <String>['rev-parse', '--verify', '@{upstream}'],
             'fatal: HEAD does not point to a branch',
           ),
         ),
@@ -214,13 +214,13 @@ void main() {
     testUsingContext('fetchLatestVersion throws toolExit if no upstream configured', () async {
       processManager.addCommands(const <FakeCommand>[
         FakeCommand(command: <String>[
-          'git', 'fetch', '--tags'
+          'git', 'fetch', '--tags',
         ]),
         FakeCommand(
-          command: <String>['git', 'rev-parse', '--verify', '@{u}'],
+          command: <String>['git', 'rev-parse', '--verify', '@{upstream}'],
           exception: ProcessException(
             'git',
-            <String>['rev-parse', '--verify', '@{u}'],
+            <String>['rev-parse', '--verify', '@{upstream}'],
             'fatal: no upstream configured for branch',
           ),
         ),
@@ -237,130 +237,6 @@ void main() {
     }, overrides: <Type, Generator>{
       ProcessManager: () => processManager,
       Platform: () => fakePlatform,
-    });
-
-    group('verifyStandardRemote', () {
-      const String flutterStandardUrlDotGit = 'https://github.com/flutter/flutter.git';
-      const String flutterNonStandardUrlDotGit = 'https://githubmirror.com/flutter/flutter.git';
-      const String flutterStandardSshUrl = 'git@github.com:flutter/flutter';
-
-      testUsingContext('throws toolExit if repository url is null', () async {
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(
-          channel: 'beta',
-          repositoryUrl: null,
-        );
-
-        await expectLater(
-          () async => realCommandRunner.verifyStandardRemote(flutterVersion),
-          throwsToolExit(message: 'Unable to upgrade Flutter: The tool could not '
-            'determine the remote upstream which is being tracked by the SDK.\n'
-            'Re-install Flutter by going to https://flutter.dev/docs/get-started/install.'
-          ),
-        );
-        expect(processManager, hasNoRemainingExpectations);
-      }, overrides: <Type, Generator> {
-        ProcessManager: () => processManager,
-        Platform: () => fakePlatform,
-      });
-
-      testUsingContext('does not throw toolExit at standard remote url with FLUTTER_GIT_URL unset', () async {
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(
-          channel: 'beta',
-        );
-        expect(() => realCommandRunner.verifyStandardRemote(flutterVersion), returnsNormally);
-        expect(processManager, hasNoRemainingExpectations);
-      }, overrides: <Type, Generator> {
-        ProcessManager: () => processManager,
-        Platform: () => fakePlatform,
-      });
-
-      testUsingContext('throws toolExit at non-standard remote url with FLUTTER_GIT_URL unset', () async {
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(
-          channel: 'beta',
-          repositoryUrl: flutterNonStandardUrlDotGit,
-        );
-
-        await expectLater(
-          () async => realCommandRunner.verifyStandardRemote(flutterVersion),
-          throwsToolExit(message: 'Unable to upgrade Flutter: The Flutter SDK '
-            'is tracking a non-standard remote "$flutterNonStandardUrlDotGit".\n'
-            'Set the environment variable "FLUTTER_GIT_URL" to '
-            '"$flutterNonStandardUrlDotGit", and retry. '
-            'Alternatively, re-install Flutter by going to '
-            'https://flutter.dev/docs/get-started/install.\n'
-            'If this is intentional, it is recommended to use "git" directly to '
-            'keep Flutter SDK up-to date.'
-          ),
-        );
-        expect(processManager, hasNoRemainingExpectations);
-      }, overrides: <Type, Generator> {
-        ProcessManager: () => processManager,
-        Platform: () => fakePlatform,
-      });
-
-      testUsingContext('does not throw toolExit at non-standard remote url with FLUTTER_GIT_URL set', () async {
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(
-          channel: 'beta',
-          repositoryUrl: flutterNonStandardUrlDotGit,
-        );
-
-        expect(() => realCommandRunner.verifyStandardRemote(flutterVersion), returnsNormally);
-        expect(processManager, hasNoRemainingExpectations);
-      }, overrides: <Type, Generator> {
-        ProcessManager: () => processManager,
-        Platform: () => fakePlatform..environment = Map<String, String>.unmodifiable(<String, String> {
-          'FLUTTER_GIT_URL': flutterNonStandardUrlDotGit,
-        }),
-      });
-
-      testUsingContext('throws toolExit at remote url and FLUTTER_GIT_URL set to different urls', () async {
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(
-          channel: 'beta',
-          repositoryUrl: flutterNonStandardUrlDotGit,
-        );
-
-        await expectLater(
-          () async => realCommandRunner.verifyStandardRemote(flutterVersion),
-          throwsToolExit(message: 'Unable to upgrade Flutter: The Flutter SDK '
-            'is tracking "$flutterNonStandardUrlDotGit" but "FLUTTER_GIT_URL" '
-            'is set to "$flutterStandardUrlDotGit".\n'
-            'Either remove "FLUTTER_GIT_URL" from the environment or set it to '
-            '"$flutterNonStandardUrlDotGit", and retry. '
-            'Alternatively, re-install Flutter by going to '
-            'https://flutter.dev/docs/get-started/install.\n'
-            'If this is intentional, it is recommended to use "git" directly to '
-            'keep Flutter SDK up-to date.'
-          ),
-        );
-        expect(processManager, hasNoRemainingExpectations);
-      }, overrides: <Type, Generator> {
-        ProcessManager: () => processManager,
-        Platform: () => fakePlatform..environment = Map<String, String>.unmodifiable(<String, String> {
-          'FLUTTER_GIT_URL': flutterStandardUrlDotGit,
-        }),
-      });
-
-      testUsingContext('exempts standard ssh url from check with FLUTTER_GIT_URL unset', () async {
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(
-          channel: 'beta',
-          repositoryUrl: flutterStandardSshUrl,
-        );
-
-        expect(() => realCommandRunner.verifyStandardRemote(flutterVersion), returnsNormally);
-        expect(processManager, hasNoRemainingExpectations);
-      }, overrides: <Type, Generator> {
-        ProcessManager: () => processManager,
-        Platform: () => fakePlatform,
-      });
-
-      testUsingContext('stripDotGit removes ".git" suffix if any', () async {
-        expect(realCommandRunner.stripDotGit('https://github.com/flutter/flutter.git'), 'https://github.com/flutter/flutter');
-        expect(realCommandRunner.stripDotGit('https://github.com/flutter/flutter'), 'https://github.com/flutter/flutter');
-        expect(realCommandRunner.stripDotGit('git@github.com:flutter/flutter.git'), 'git@github.com:flutter/flutter');
-        expect(realCommandRunner.stripDotGit('git@github.com:flutter/flutter'), 'git@github.com:flutter/flutter');
-        expect(realCommandRunner.stripDotGit('https://githubmirror.com/flutter/flutter.git.git'), 'https://githubmirror.com/flutter/flutter.git');
-        expect(realCommandRunner.stripDotGit('https://githubmirror.com/flutter/flutter.gitgit'), 'https://githubmirror.com/flutter/flutter.gitgit');
-      });
     });
 
     testUsingContext('git exception during attemptReset throwsToolExit', () async {
@@ -413,7 +289,7 @@ void main() {
       const String upstreamVersion = '4.5.6';
 
       final FakeFlutterVersion flutterVersion = FakeFlutterVersion(
-        channel: 'beta',
+        branch: 'beta',
         frameworkRevision: revision,
         frameworkVersion: version,
       );
@@ -453,7 +329,7 @@ void main() {
           environment: <String, String>{'FLUTTER_ALREADY_LOCKED': 'true', ...fakePlatform.environment}
         ),
       );
-      await realCommandRunner.precacheArtifacts();
+      await precacheArtifacts();
       expect(processManager, hasNoRemainingExpectations);
     }, overrides: <Type, Generator>{
       ProcessManager: () => processManager,
@@ -473,8 +349,8 @@ void main() {
       });
 
       testUsingContext('does not throw on unknown tag, official branch, force', () async {
-        fakeCommandRunner.remoteVersion = FakeFlutterVersion(frameworkRevision: null);
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(channel: 'beta');
+        fakeCommandRunner.remoteVersion = FakeFlutterVersion(frameworkRevision: '1234');
+        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(branch: 'beta');
 
         final Future<FlutterCommandResult> result = fakeCommandRunner.runCommand(
           force: true,
@@ -492,8 +368,8 @@ void main() {
       });
 
       testUsingContext('does not throw tool exit with uncommitted changes and force', () async {
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(channel: 'beta');
-        fakeCommandRunner.remoteVersion = FakeFlutterVersion(frameworkRevision: null);
+        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(branch: 'beta');
+        fakeCommandRunner.remoteVersion = FakeFlutterVersion(frameworkRevision: '1234');
         fakeCommandRunner.willHaveUncommittedChanges = true;
 
         final Future<FlutterCommandResult> result = fakeCommandRunner.runCommand(
@@ -512,8 +388,8 @@ void main() {
       });
 
       testUsingContext("Doesn't throw on known tag, beta branch, no force", () async {
-        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(channel: 'beta');
-        fakeCommandRunner.remoteVersion = FakeFlutterVersion(frameworkRevision: null);
+        final FakeFlutterVersion flutterVersion = FakeFlutterVersion(branch: 'beta');
+        fakeCommandRunner.remoteVersion = FakeFlutterVersion(frameworkRevision: '1234');
 
         final Future<FlutterCommandResult> result = fakeCommandRunner.runCommand(
           force: false,
@@ -531,9 +407,10 @@ void main() {
       });
 
       group('full command', () {
-        FakeProcessManager fakeProcessManager;
-        Directory tempDir;
-        File flutterToolState;
+        late FakeProcessManager fakeProcessManager;
+        late Directory tempDir;
+        late File flutterToolState;
+        late FileSystem fs;
 
         setUp(() {
           Cache.disableLocking();
@@ -550,7 +427,8 @@ void main() {
               stdout: 'v1.12.16-19-gb45b676af',
             ),
           ]);
-          tempDir = globals.fs.systemTempDirectory.createTempSync('flutter_upgrade_test.');
+          fs = MemoryFileSystem.test();
+          tempDir = fs.systemTempDirectory.createTempSync('flutter_upgrade_test.');
           flutterToolState = tempDir.childFile('.flutter_tool_state');
         });
 
@@ -560,6 +438,7 @@ void main() {
         });
 
         testUsingContext('upgrade continue prints welcome message', () async {
+          fakeProcessManager = FakeProcessManager.any();
           final UpgradeCommand upgradeCommand = UpgradeCommand(
             verboseHelp: false,
             commandRunner: fakeCommandRunner,
@@ -577,6 +456,7 @@ void main() {
             containsPair('redisplay-welcome-message', true),
           );
         }, overrides: <Type, Generator>{
+          FileSystem: () => fs,
           FlutterVersion: () => FakeFlutterVersion(),
           ProcessManager: () => fakeProcessManager,
           PersistentToolState: () => PersistentToolState.test(
@@ -594,19 +474,16 @@ class FakeUpgradeCommandRunner extends UpgradeCommandRunner {
   bool willHaveUncommittedChanges = false;
   bool alreadyUpToDate = false;
 
-  FlutterVersion remoteVersion;
+  late FlutterVersion remoteVersion;
 
   @override
-  Future<FlutterVersion> fetchLatestVersion({FlutterVersion localVersion}) async => remoteVersion;
+  Future<FlutterVersion> fetchLatestVersion({FlutterVersion? localVersion}) async => remoteVersion;
 
   @override
   Future<bool> hasUncommittedChanges() async => willHaveUncommittedChanges;
 
   @override
   Future<void> attemptReset(String newRevision) async {}
-
-  @override
-  Future<void> precacheArtifacts() async {}
 
   @override
   Future<void> updatePackages(FlutterVersion flutterVersion) async {}

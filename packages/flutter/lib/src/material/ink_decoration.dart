@@ -146,7 +146,7 @@ class Ink extends StatefulWidget {
   /// If there is no intention to render anything on this decoration, consider
   /// using a [Container] with a [BoxDecoration] instead.
   Ink({
-    Key? key,
+    super.key,
     this.padding,
     Color? color,
     Decoration? decoration,
@@ -159,8 +159,7 @@ class Ink extends StatefulWidget {
          'Cannot provide both a color and a decoration\n'
          'The color argument is just a shorthand for "decoration: BoxDecoration(color: color)".',
        ),
-       decoration = decoration ?? (color != null ? BoxDecoration(color: color) : null),
-       super(key: key);
+       decoration = decoration ?? (color != null ? BoxDecoration(color: color) : null);
 
   /// Creates a widget that shows an image (obtained from an [ImageProvider]) on
   /// a [Material].
@@ -170,9 +169,8 @@ class Ink extends StatefulWidget {
   /// properties of the [DecorationImage] of that [BoxDecoration] are set
   /// according to the arguments passed to this method.
   ///
-  /// The `image` argument must not be null. If there is no
-  /// intention to render anything on this image, consider using a
-  /// [Container] with a [BoxDecoration.image] instead. The `onImageError`
+  /// If there is no intention to render anything on this image, consider using
+  /// a [Container] with a [BoxDecoration.image] instead. The `onImageError`
   /// argument may be provided to listen for errors when resolving the image.
   ///
   /// The `alignment`, `repeat`, and `matchTextDirection` arguments must not
@@ -180,7 +178,7 @@ class Ink extends StatefulWidget {
   ///
   /// See [paintImage] for a description of the meaning of these arguments.
   Ink.image({
-    Key? key,
+    super.key,
     this.padding,
     required ImageProvider image,
     ImageErrorListener? onImageError,
@@ -194,10 +192,6 @@ class Ink extends StatefulWidget {
     this.height,
     this.child,
   }) : assert(padding == null || padding.isNonNegative),
-       assert(image != null),
-       assert(alignment != null),
-       assert(repeat != null),
-       assert(matchTextDirection != null),
        decoration = BoxDecoration(
          image: DecorationImage(
            image: image,
@@ -209,8 +203,7 @@ class Ink extends StatefulWidget {
            repeat: repeat,
            matchTextDirection: matchTextDirection,
          ),
-       ),
-       super(key: key);
+       );
 
   /// The [child] contained by the container.
   ///
@@ -227,7 +220,7 @@ class Ink extends StatefulWidget {
   /// The decoration to paint on the nearest ancestor [Material] widget.
   ///
   /// A shorthand for specifying just a solid color is available in the
-  /// constructor: set the `color` argument instead of the `decoration`
+  /// constructor: set the `color` argument instead of the [decoration]
   /// argument.
   ///
   /// A shorthand for specifying just an image is also available using the
@@ -243,11 +236,13 @@ class Ink extends StatefulWidget {
   final double? height;
 
   EdgeInsetsGeometry get _paddingIncludingDecoration {
-    if (decoration == null || decoration!.padding == null)
+    if (decoration == null) {
       return padding ?? EdgeInsets.zero;
-    final EdgeInsetsGeometry decorationPadding = decoration!.padding!;
-    if (padding == null)
+    }
+    final EdgeInsetsGeometry decorationPadding = decoration!.padding;
+    if (padding == null) {
       return decorationPadding;
+    }
     return padding!.add(decorationPadding);
   }
 
@@ -283,16 +278,18 @@ class _InkState extends State<Ink> {
     if (_ink == null) {
       _ink = InkDecoration(
         decoration: widget.decoration,
+        isVisible: Visibility.of(context),
         configuration: createLocalImageConfiguration(context),
-        controller: Material.of(context)!,
+        controller: Material.of(context),
         referenceBox: _boxKey.currentContext!.findRenderObject()! as RenderBox,
         onRemoved: _handleRemoved,
       );
     } else {
       _ink!.decoration = widget.decoration;
+      _ink!.isVisible = Visibility.of(context);
       _ink!.configuration = createLocalImageConfiguration(context);
     }
-    return widget.child ?? Container();
+    return widget.child ?? ConstrainedBox(constraints: const BoxConstraints.expand());
   }
 
   @override
@@ -333,14 +330,14 @@ class InkDecoration extends InkFeature {
   /// Draws a decoration on a [Material].
   InkDecoration({
     required Decoration? decoration,
+    bool isVisible = true,
     required ImageConfiguration configuration,
-    required MaterialInkController controller,
-    required RenderBox referenceBox,
-    VoidCallback? onRemoved,
-  }) : assert(configuration != null),
-       _configuration = configuration,
-       super(controller: controller, referenceBox: referenceBox, onRemoved: onRemoved) {
+    required super.controller,
+    required super.referenceBox,
+    super.onRemoved,
+  }) : _configuration = configuration {
     this.decoration = decoration;
+    this.isVisible = isVisible;
     controller.addInkFeature(this);
   }
 
@@ -353,11 +350,25 @@ class InkDecoration extends InkFeature {
   Decoration? get decoration => _decoration;
   Decoration? _decoration;
   set decoration(Decoration? value) {
-    if (value == _decoration)
+    if (value == _decoration) {
       return;
+    }
     _decoration = value;
     _painter?.dispose();
     _painter = _decoration?.createBoxPainter(_handleChanged);
+    controller.markNeedsPaint();
+  }
+
+  /// Whether the decoration should be painted.
+  ///
+  /// Defaults to true.
+  bool get isVisible => _isVisible;
+  bool _isVisible = true;
+  set isVisible(bool value) {
+    if (value == _isVisible) {
+      return;
+    }
+    _isVisible = value;
     controller.markNeedsPaint();
   }
 
@@ -369,9 +380,9 @@ class InkDecoration extends InkFeature {
   ImageConfiguration get configuration => _configuration;
   ImageConfiguration _configuration;
   set configuration(ImageConfiguration value) {
-    assert(value != null);
-    if (value == _configuration)
+    if (value == _configuration) {
       return;
+    }
     _configuration = value;
     controller.markNeedsPaint();
   }
@@ -388,8 +399,9 @@ class InkDecoration extends InkFeature {
 
   @override
   void paintFeature(Canvas canvas, Matrix4 transform) {
-    if (_painter == null)
+    if (_painter == null || !isVisible) {
       return;
+    }
     final Offset? originOffset = MatrixUtils.getAsTranslation(transform);
     final ImageConfiguration sizedConfiguration = configuration.copyWith(
       size: referenceBox.size,

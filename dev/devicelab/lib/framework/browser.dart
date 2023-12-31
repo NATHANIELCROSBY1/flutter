@@ -3,14 +3,12 @@
 // found in the LICENSE file.
 
 import 'dart:async';
-import 'dart:convert' show json, utf8, LineSplitter, JsonEncoder;
+import 'dart:convert' show JsonEncoder, LineSplitter, json, utf8;
 import 'dart:io' as io;
 import 'dart:math' as math;
 
 import 'package:path/path.dart' as path;
 import 'package:webkit_inspection_protocol/webkit_inspection_protocol.dart';
-
-import '../common.dart';
 
 /// The number of samples used to extract metrics, such as noise, means,
 /// max/min values.
@@ -27,6 +25,7 @@ class ChromeOptions {
     this.windowHeight = 1024,
     this.headless,
     this.debugPort,
+    this.enableWasmGC = false,
   });
 
   /// If not null passed as `--user-data-dir`.
@@ -55,6 +54,9 @@ class ChromeOptions {
   /// mode without a debug port, Chrome quits immediately. For most tests it is
   /// typical to set [headless] to true and set a non-null debug port.
   final int? debugPort;
+
+  /// Whether to enable experimental WasmGC flags
+  final bool enableWasmGC;
 }
 
 /// A function called when the Chrome process encounters an error.
@@ -85,6 +87,10 @@ class Chrome {
       print('Launching Chrome...');
     }
 
+    final String jsFlags = options.enableWasmGC ? <String>[
+      '--experimental-wasm-gc',
+      '--experimental-wasm-type-reflection',
+    ].join(' ') : '';
     final bool withDebugging = options.debugPort != null;
     final List<String> args = <String>[
       if (options.userDataDirectory != null)
@@ -93,7 +99,7 @@ class Chrome {
         options.url!,
       if (io.Platform.environment['CHROME_NO_SANDBOX'] == 'true')
         '--no-sandbox',
-      if (options.headless == true)
+      if (options.headless ?? false)
         '--headless',
       if (withDebugging)
         '--remote-debugging-port=${options.debugPort}',
@@ -106,6 +112,7 @@ class Chrome {
       '--no-default-browser-check',
       '--disable-default-apps',
       '--disable-translate',
+      if (jsFlags.isNotEmpty) '--js-flags=$jsFlags',
     ];
 
     final io.Process chromeProcess = await _spawnChromiumProcess(
@@ -306,12 +313,6 @@ class BlinkTraceSummary {
         orElse: () => throw noMeasuredFramesFound(),
       );
 
-      if (firstMeasuredFrameEvent == null) {
-        // This happens in benchmarks that do not measure frames, such as some
-        // of the text layout benchmarks.
-        return null;
-      }
-
       final int tabPid = firstMeasuredFrameEvent.pid!;
 
       // Filter out data from unrelated processes
@@ -505,8 +506,17 @@ class BlinkTraceEvent {
   /// This event does not include non-UI thread scripting, such as web workers,
   /// service workers, and CSS Paint paintlets.
   ///
+  /// WebViewImpl::beginFrame was used in earlier versions of Chrome, kept
+  /// for compatibility.
+  ///
   /// This event is a duration event that has its `tdur` populated.
-  bool get isBeginFrame => ph == 'X' && name == 'WebViewImpl::beginFrame';
+  bool get isBeginFrame {
+    return ph == 'X' && (
+      name == 'WebViewImpl::beginFrame' ||
+      name == 'WebFrameWidgetBase::BeginMainFrame' ||
+      name == 'WebFrameWidgetImpl::BeginMainFrame'
+    );
+  }
 
   /// An "update all lifecycle phases" event contains UI thread computations
   /// related to an animation frame that's outside the scripting phase.
@@ -514,8 +524,16 @@ class BlinkTraceEvent {
   /// This event includes style recalculation, layer tree update, layout,
   /// painting, and parts of compositing work.
   ///
+  /// WebViewImpl::updateAllLifecyclePhases was used in earlier versions of
+  /// Chrome, kept for compatibility.
+  ///
   /// This event is a duration event that has its `tdur` populated.
-  bool get isUpdateAllLifecyclePhases => ph == 'X' && name == 'WebViewImpl::updateAllLifecyclePhases';
+  bool get isUpdateAllLifecyclePhases {
+    return ph == 'X' && (
+      name == 'WebViewImpl::updateAllLifecyclePhases' ||
+      name == 'WebFrameWidgetImpl::UpdateLifecycle'
+    );
+  }
 
   /// Whether this is the beginning of a "measured_frame" event.
   ///

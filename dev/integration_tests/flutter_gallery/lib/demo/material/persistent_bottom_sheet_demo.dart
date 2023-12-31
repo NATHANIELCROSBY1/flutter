@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import '../../gallery/demo.dart';
 
 class PersistentBottomSheetDemo extends StatefulWidget {
-  const PersistentBottomSheetDemo({Key? key}) : super(key: key);
+  const PersistentBottomSheetDemo({super.key});
 
   static const String routeName = '/material/persistent-bottom-sheet';
 
@@ -30,7 +30,7 @@ class _PersistentBottomSheetDemoState extends State<PersistentBottomSheetDemo> {
     setState(() { // disable the button
       _showBottomSheetCallback = null;
     });
-    _scaffoldKey.currentState!.showBottomSheet<void>((BuildContext context) {
+    _scaffoldKey.currentState!.showBottomSheet((BuildContext context) {
       final ThemeData themeData = Theme.of(context);
       return Container(
         decoration: BoxDecoration(

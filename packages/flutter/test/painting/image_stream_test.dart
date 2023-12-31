@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
-import 'package:flutter/scheduler.dart' show timeDilation, SchedulerBinding;
+import 'package:flutter/scheduler.dart' show SchedulerBinding, timeDilation;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:leak_tracker_flutter_testing/leak_tracker_flutter_testing.dart';
 
 import '../image_data.dart';
 import 'fake_codec.dart';
@@ -26,8 +26,6 @@ class FakeFrameInfo implements FrameInfo {
 
   @override
   Image get image => _image;
-
-  int get imageHandleCount => image.debugGetOpenHandleStackTraces()!.length;
 
   FakeFrameInfo clone() {
     return FakeFrameInfo(
@@ -76,24 +74,6 @@ class FakeEventReportingImageStreamCompleter extends ImageStreamCompleter {
         },
       );
     }
-  }
-}
-
-class SynchronousTestImageProvider extends ImageProvider<int> {
-  const SynchronousTestImageProvider(this.image);
-
-  final Image image;
-
-  @override
-  Future<int> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture<int>(1);
-  }
-
-  @override
-  ImageStreamCompleter load(int key, DecoderCallback decode) {
-    return OneFrameImageStreamCompleter(
-      SynchronousFuture<ImageInfo>(TestImageInfo(key, image: image)),
-    );
   }
 }
 
@@ -890,5 +870,22 @@ void main() {
     imageStream.setCompleter(imageStreamCompleter);
 
     expect(synchronouslyCalled, false);
+  });
+
+  test('ImageStreamCompleterHandle dispatches memory events', () async {
+    await expectLater(
+      await memoryEvents(
+            () {
+              final StreamController<ImageChunkEvent> streamController = StreamController<ImageChunkEvent>();
+              addTearDown(streamController.close);
+              final ImageStreamCompleterHandle imageStreamCompleterHandle = FakeEventReportingImageStreamCompleter(
+                chunkEvents: streamController.stream,
+              ).keepAlive();
+              imageStreamCompleterHandle.dispose();
+            },
+        ImageStreamCompleterHandle,
+      ),
+      areCreateAndDispose,
+    );
   });
 }

@@ -13,7 +13,7 @@ class DeferredComponentsProject extends Project {
   final String pubspec = '''
   name: test
   environment:
-    sdk: ">=2.12.0-0 <3.0.0"
+    sdk: '>=3.2.0-0 <4.0.0'
 
   dependencies:
     flutter:
@@ -45,7 +45,7 @@ class DeferredComponentsProject extends Project {
         libFuture = DeferredLibrary.loadLibrary();
         libFuture?.whenComplete(() => deferredText = 'complete ${DeferredLibrary.add(10, 42)}');
       }
-      runApp(new MyApp());
+      runApp(MyApp());
       await Future.delayed(const Duration(milliseconds: 50));
     }
   }
@@ -54,9 +54,9 @@ class DeferredComponentsProject extends Project {
     @override
     Widget build(BuildContext context) {
       topLevelFunction();
-      return new MaterialApp( // BUILD BREAKPOINT
+      return MaterialApp( // BUILD BREAKPOINT
         title: 'Flutter Demo',
-        home: new Container(),
+        home: Container(),
       );
     }
   }
@@ -107,14 +107,14 @@ class BasicDeferredComponentsConfig extends DeferredComponentsConfig {
   @override
   String get androidBuild => r'''
   buildscript {
-      ext.kotlin_version = '1.3.50'
+      ext.kotlin_version = '1.7.10'
       repositories {
           google()
           mavenCentral()
       }
 
       dependencies {
-          classpath 'com.android.tools.build:gradle:4.1.0'
+          classpath 'com.android.tools.build:gradle:7.3.0'
           classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
       }
   }
@@ -134,7 +134,7 @@ class BasicDeferredComponentsConfig extends DeferredComponentsConfig {
       project.evaluationDependsOn(':app')
   }
 
-  task clean(type: Delete) {
+  tasks.register("clean", Delete) {
       delete rootProject.buildDir
   }
   ''';
@@ -175,7 +175,7 @@ class BasicDeferredComponentsConfig extends DeferredComponentsConfig {
   apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
   android {
-      compileSdkVersion flutter.compileSdkVersion
+      compileSdk flutter.compileSdkVersion
       ndkVersion flutter.ndkVersion
 
       sourceSets {
@@ -232,7 +232,7 @@ class BasicDeferredComponentsConfig extends DeferredComponentsConfig {
 
   @override
   String get androidGradleProperties => '''
-  org.gradle.jvmargs=-Xmx1536M
+  org.gradle.jvmargs=-Xmx4G
   android.useAndroidX=true
   android.enableJetifier=true
   android.enableR8=true
@@ -477,7 +477,7 @@ class BasicDeferredComponentsConfig extends DeferredComponentsConfig {
     0xe5, 0x87, 0x64, 0x4d, 0x36, 0x12, 0x40, 0xc4, 0x67, 0x78, 0xce, 0x38, 0x60, 0x24, 0xdf, 0x3c,
     0xc0, 0xbb, 0xf7, 0x7d, 0x2f, 0x66, 0x56, 0xfb, 0xfa, 0x75, 0x2a, 0xe5, 0x23, 0x7a, 0xad, 0x5c,
     0xef, 0x2d, 0xa1, 0xb6, 0x7c, 0xbd, 0xfa, 0xb3, 0xdc, 0x68, 0x55, 0xd1, 0xa0, 0xac, 0x8c, 0x06,
-    0x62, 0x21, 0xe9, 0x7d, 0x64, 0xd0, 0x60, 0xb3, 0x12, 0x2e, 0x6a, 0x50, 0xf4
+    0x62, 0x21, 0xe9, 0x7d, 0x64, 0xd0, 0x60, 0xb3, 0x12, 0x2e, 0x6a, 0x50, 0xf4,
   ];
 
   @override
@@ -495,6 +495,7 @@ class BasicDeferredComponentsConfig extends DeferredComponentsConfig {
           android:extractNativeLibs="false">
           <activity
               android:name=".MainActivity"
+              android:exported="true"
               android:launchMode="singleTop"
               android:theme="@style/LaunchTheme"
               android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -507,15 +508,6 @@ class BasicDeferredComponentsConfig extends DeferredComponentsConfig {
               <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"
-                />
-              <!-- Displays an Android View that continues showing the launch screen
-                   Drawable until Flutter paints its first frame, then this splash
-                   screen fades out. A splash screen is useful to avoid any visual
-                   gap between the end of Android's launch screen and the painting of
-                   Flutter's first frame. -->
-              <meta-data
-                android:name="io.flutter.embedding.android.SplashScreenDrawable"
-                android:resource="@drawable/launch_background"
                 />
               <intent-filter>
                   <action android:name="android.intent.action.MAIN"/>

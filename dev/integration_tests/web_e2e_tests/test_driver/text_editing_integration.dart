@@ -80,9 +80,14 @@ void main() {
     expect(textFormFieldsFinder, findsOneWidget);
     await tester.tap(find.byKey(const Key('input2')));
 
-    // // Press Tab. This should trigger `onFieldSubmitted` of TextField.
+    // Press Tab. This should trigger `onFieldSubmitted` of TextField.
     final InputElement input = findElements('input')[0] as InputElement;
     dispatchKeyboardEvent(input, 'keydown', <String, dynamic>{
+      'keyCode': 13, // Enter.
+      'cancelable': true,
+    });
+    // Release Tab.
+    dispatchKeyboardEvent(input, 'keyup', <String, dynamic>{
       'keyCode': 13, // Enter.
       'cancelable': true,
     });
@@ -112,6 +117,14 @@ void main() {
 
     // Press Tab. The focus should move to the next TextFormField.
     dispatchKeyboardEvent(input, 'keydown', <String, dynamic>{
+      'key': 'Tab',
+      'code': 'Tab',
+      'bubbles': true,
+      'cancelable': true,
+      'composed': true,
+    });
+    // Release tab.
+    dispatchKeyboardEvent(input, 'keyup', <String, dynamic>{
       'key': 'Tab',
       'code': 'Tab',
       'bubbles': true,
@@ -165,6 +178,14 @@ void main() {
       'cancelable': true,
       'composed': true,
     });
+    // Release Tab.
+    dispatchKeyboardEvent(input, 'keyup', <String, dynamic>{
+      'key': 'Tab',
+      'code': 'Tab',
+      'bubbles': true,
+      'cancelable': true,
+      'composed': true,
+    });
 
     await tester.pumpAndSettle();
 
@@ -190,7 +211,6 @@ void main() {
     // Drag by mouse to select the entire selectable text.
     TestGesture gesture =
         await tester.startGesture(topLeft, kind: PointerDeviceKind.mouse);
-    addTearDown(gesture.removePointer);
     await gesture.moveTo(topRight);
     await gesture.up();
 
@@ -213,7 +233,6 @@ void main() {
       firstWordOffset,
       kind: PointerDeviceKind.mouse,
     );
-    addTearDown(gesture.removePointer);
     await gesture.up();
     await gesture.down(firstWordOffset);
     await gesture.up();
@@ -226,7 +245,6 @@ void main() {
       lastWordOffset,
       kind: PointerDeviceKind.mouse,
     );
-    addTearDown(gesture.removePointer);
     await gesture.up();
     await gesture.down(lastWordOffset);
     await gesture.up();
@@ -237,14 +255,11 @@ void main() {
 
 KeyboardEvent dispatchKeyboardEvent(
     EventTarget target, String type, Map<String, dynamic> args) {
-  // ignore: implicit_dynamic_function
   final Object jsKeyboardEvent = js_util.getProperty(window, 'KeyboardEvent') as Object;
   final List<dynamic> eventArgs = <dynamic>[
     type,
     args,
   ];
-
-  // ignore: implicit_dynamic_function
   final KeyboardEvent event = js_util.callConstructor(
           jsKeyboardEvent, js_util.jsify(eventArgs) as List<dynamic>)
       as KeyboardEvent;
