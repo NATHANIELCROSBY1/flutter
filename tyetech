@@ -1,0 +1,115 @@
+@NATHANIELCROSBY1
+NATHANIELCROSBY1 create
+…
+609e127
+13 days ago
+Git stats
+ 27,477 commits
+Files
+Type
+Name
+Latest commit message
+Commit time
+.github
+Bump github/codeql-action from 1.0.26 to 1.0.31 (flutter#97820)
+14 days ago
+bin
+Roll Engine from 2a4709ae9fc4 to 0712096899f0 (1 revision) (flutter#9…
+13 days ago
+dev
+Include -isysroot -arch and -miphoneos-version-min when creating dumm…
+15 days ago
+examples
+Clean up the bindings APIs. (flutter#89451)
+16 days ago
+packages
+Report progress on Dismissible update callback (flutter#95504)
+14 days ago
+.ci.yaml
+Marks Linux_android opacity_peephole_fade_transition_text_perf__e2e_s…
+15 days ago
+.cirrus.yml
+Pin dependencies in docker file. (flutter#97466)
+18 days ago
+.gitattributes
+Add pre-stable support for create on Windows (flutter#51895)
+2 years ago
+.gitignore
+Add macOS ephemeral to gitignore (flutter#96397)
+20 days ago
+AUTHORS
+Mirror before scaling in _AnimatedIconPainter (flutter#93312)
+24 days ago
+CODEOWNERS
+[codeowners] Remove *_builders.json ownership (flutter#91691)
+4 months ago
+CODE_OF_CONDUCT.md
+Update CODE_OF_CONDUCT.md (flutter#94583)
+3 months ago
+CONTRIBUTING.md
+Links How to contribute to Flutter YouTube video (flutter#96313)
+last month
+LICENSE
+License update (flutter#45373)
+2 years ago
+PATENT_GRANT
+Rename patent file (flutter#38686)
+3 years ago
+README.md
+Update README (flutter#97271)
+24 days ago
+TESTOWNERS
+Add benchmarks to measure impact of alpha saveLayers in DisplayLists (f…
+23 days ago
+analysis_options.yaml
+Enable no_leading_underscores_for_local_identifiers (flutter#96422)
+29 days ago
+dartdoc_options.yaml
+Eliminate uses of pub executable in docs publishing and sample analys…
+6 months ago
+flutter_console.bat
+License update (flutter#45373)
+2 years ago
+git clone
+create
+13 days ago
+README.md
+Flutter logo
+Build Status - Cirrus Discord badge Twitter handle
+
+Flutter is Google's SDK for crafting beautiful, fast user experiences for mobile, web, and desktop from a single codebase. Flutter works with existing code, is used by developers and organizations around the world, and is free and open source.
+
+Documentation
+Install Flutter
+Flutter documentation
+Development wiki
+Contributing to Flutter
+For announcements about new releases, follow the flutter-announce@googlegroups.com mailing list. Our documentation also tracks breaking changes across releases.
+
+Terms of service
+The Flutter tool may occasionally download resources from Google servers. By downloading or using the Flutter SDK you agree to the Google Terms of Service: https://policies.google.com/terms
+
+For example, when installed from GitHub (as opposed to from a prepackaged archive), the Flutter tool will download the Dart SDK from Google servers immediately when first run, as it is used to execute the flutter tool itself. This will also occur when Flutter is upgraded (e.g. by running the flutter upgrade command).
+
+About Flutter
+We think Flutter will help you create beautiful, fast apps, with a productive, extensible and open development model, whether you're targeting iOS or Android, web, Windows, macOS, Linux or embedding it as the UI toolkit for a platform of your choice.
+
+Beautiful user experiences
+We want to enable designers to deliver their full creative vision without being forced to water it down due to limitations of the underlying framework. Flutter's layered architecture gives you control over every pixel on the screen and its powerful compositing capabilities let you overlay and animate graphics, video, text, and controls without limitation. Flutter includes a full set of widgets that deliver pixel-perfect experiences whether you're building for iOS (Cupertino) or Android (Material), along with support for customizing or creating entirely new visual components.
+
+Reflectly hero image
+
+Fast results
+Flutter is fast. It's powered by the same hardware-accelerated 2D graphics library that underpins Chrome and Android: Skia. We architected Flutter to support glitch-free, jank-free graphics at the native speed of your device. Flutter code is powered by the world-class Dart platform, which enables compilation to 32-bit and 64-bit ARM machine code for iOS and Android, as well as JavaScript for the web and Intel x64 for desktop devices.
+
+Dart diagram
+
+Productive development
+Flutter offers stateful hot reload, allowing you to make changes to your code and see the results instantly without restarting your app or losing its state.
+
+Hot reload animation
+
+Extensible and open model
+Flutter works with any development tool (or none at all), and also includes editor plug-ins for both Visual Studio Code and IntelliJ / Android Studio. Flutter provides tens of thousands of packages to speed your development, regardless of your target platform. And accessing other native code is easy, with support for both FFI and platform-specific APIs.
+
+Flutter is a fully open-source project, and we welcome contributions. Information on how to get started can be found in our contributor guide.
